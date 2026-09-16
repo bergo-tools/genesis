@@ -5,7 +5,7 @@ Genesis 是一个用 Go 写的、类 SillyTavern 的角色扮演应用，但它�
 记忆、骰子判定、给玩家的选项、结束回合——都是**一次 function/tool call**。
 因此新增一个能力只需要在 Go 里注册一个工具，不需要改动任何 prompt 拼装或协议代码。
 
-最终产物是**一个二进制文件**：前端（原生 JS，无构建步骤）通过 `go:embed` 打包进去，
+最终产物是**一个二进制文件**：前端（Preact + htm，无构建步骤）通过 `go:embed` 打包进去，
 OpenRouter 的 chat 接口由官方 SDK [`github.com/OpenRouterTeam/go-sdk`](https://github.com/OpenRouterTeam/go-sdk) 调用。
 
 ## 特性
@@ -17,7 +17,7 @@ OpenRouter 的 chat 接口由官方 SDK [`github.com/OpenRouterTeam/go-sdk`](htt
 - **多步推理**：模型可以连续「思考 → 查询 → 行动 → 再行动」，直到调用终结工具
   （`await_player` / `end_turn`）或达到步数上限。
 - **持久化**：会话以 JSON 原子写入磁盘；`config.json` 保存配置（API key 可来自 `.env`）。
-- **单二进制 + 嵌入式前端**：自适应、移动端可用、跟随系统深浅色。
+- **单二进制 + 嵌入式前端**：Preact + htm 组件、自适应、移动端可用、跟随系统深浅色、零构建。
 - **可替换后端**：默认 OpenRouter；因为 SDK 讲的是 OpenAI 兼容协议，
   在 Settings 里改 Base URL 就能接到任何兼容端点（例如本地或第三方）。
 
@@ -31,7 +31,7 @@ internal/store/              会话数据模型与文件持久化
 internal/agent/              工具注册表、事件、agent 循环、system prompt
 internal/tools/              内置工具（新增工具只需加一个文件 + 一行注册）
 internal/server/             HTTP 路由、NDJSON 流式接口
-web/                         原生 JS 前端（embed 进二进制）
+web/                         Preact + htm 前端（Vendor ESM，embed 进二进制）
 ```
 
 ## 快速开始
@@ -163,16 +163,36 @@ r.Register(weatherTool())
   `notice`，不会丢内容。追求严格约束可在 Settings 里改成 `required`。
 - system prompt 每次请求根据角色卡/场景/状态/记忆重建，历史只存 `user/assistant/tool` 消息。
 
+## 前端技术栈
+
+- **Preact 10 + htm**：Preact 本体、hooks 和 `htm`（用 tagged template 代替 JSX）
+  以 **Vendor ESM 原生模块**（`web/vendor/*.module.js`）提交在仓库里，
+  **没有 npm install、没有 bundler、没有构建步骤**。对上游只做了一处改动：
+  把裸导入 `"preact"` 重写成相对路径。
+- **模块划分**：`api.js`（网络 + NDJSON 流解析）、`format.js`（HTML 转义 + 轻量 markdown）、
+  `components.js`（纯展示组件）、`app.js`（根组件、hooks 状态、流事件处理与 `mount()`）。
+- **样式**：原生 CSS 变量 + `prefers-color-scheme` + `env(safe-area-inset-*)`，
+  移动优先，桌面为固定侧栏、移动端为抽屉。
+- **流式**：`fetch` + `ReadableStream` 手写 NDJSON 解析，`AbortController` 支持 Stop 中断。
+- **无浏览器冒烟测试**：`web/test/render.test.mjs` 用 vendored 的
+  `preact-render-to-string` 把整棵组件树渲染成字符串并校验关键文案，由 `make test-web` 运行。
+  `web/package.json` 只是让 Node 把 `.js` 当作 ESM（无依赖、无 build）。
+
+依赖版本与许可证见 `web/vendor/LICENSES.md`。`go:embed` 只打包运行时需要的文件，
+`test/` 与 `package.json` 不会进入二进制。
+
 ## 开发
 
 ```bash
-make test     # go test ./...
+make test     # go test ./... + Preact SSR 冒烟测试
+make test-web # 仅前端 SSR 冒烟测试
 make vet      # go vet ./...
 make fmt      # gofmt
 make dev ARGS="-addr 127.0.0.1:8080"
 ```
 
-测试覆盖 agent 循环（工具执行、终结、协议兜底、历史裁剪）、工具行为与持久化。
+测试覆盖 agent 循环（工具执行、终结、协议兜底、历史裁剪）、工具行为、持久化，
+以及前端组件树的 SSR 渲染。
 
 ### 关于本机 Go 环境
 

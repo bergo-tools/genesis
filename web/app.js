@@ -1,403 +1,364 @@
+import { h, Fragment, render } from './vendor/preact.module.js';
+import { useCallback, useEffect, useRef, useState } from './vendor/hooks.module.js';
+import htm from './vendor/htm.module.js';
 import { api } from './api.js';
-import { state, activeCharacter, findCharacter } from './store.js';
-import * as ui from './ui.js';
+import * as C from './components.js';
 
+const html = htm.bind(h);
 const LS_KEY = 'genesis.lastSession';
 
-// ---------------------------------------------------------------- boot
+export function App() {
+  const [config, setConfig] = useState(null);
+  const [sessions, setSessions] = useState([]);
+  const [session, setSession] = useState(null);
+  const [status, setStatus] = useState(null);
+  const [activity, setActivity] = useState([]);
+  const [choices, setChoices] = useState([]);
+  const [usage, setUsage] = useState(null);
+  const [streaming, setStreaming] = useState(false);
+  const [modal, setModal] = useState(null);
+  const [tools, setTools] = useState([]);
+  const [toasts, setToasts] = useState([]);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(false);
 
-async function boot() {
-  wireStaticEvents();
-  try {
-    state.config = await api.config();
-  } catch (err) {
-    ui.toast('Could not load configuration: ' + err.message, 'error');
-  }
-  await refreshSessions();
-  const last = localStorage.getItem(LS_KEY);
-  const target = last && state.sessions.some((s) => s.id === last) ? last : (state.sessions[0] && state.sessions[0].id);
-  if (target) {
-    await openSession(target);
-  } else {
-    ui.renderEmptyState();
-    ui.renderHeader();
-    ui.renderPanel();
-  }
-  if (state.config && !state.config.hasKey) {
-    ui.toast('Add your OpenRouter API key in Settings to begin.', 'info');
-  }
-}
+  const abortRef = useRef(null);
+  const sessionRef = useRef(null);
+  const toastId = useRef(0);
 
-function wireStaticEvents() {
-  ui.$('new-session').addEventListener('click', openNewStory);
-  ui.$('open-settings').addEventListener('click', openSettings);
-  ui.$('open-tools').addEventListener('click', openTools);
-  ui.$('send').addEventListener('click', () => send(ui.$('input').value));
-  ui.$('stop').addEventListener('click', () => { if (state.abort) state.abort.abort(); });
-  ui.$('menu-toggle').addEventListener('click', toggleSidebar);
-  ui.$('panel-toggle').addEventListener('click', togglePanel);
-  ui.$('panel-close').addEventListener('click', () => setPanel(false));
-  ui.$('scrim').addEventListener('click', () => { setSidebar(false); setPanel(false); });
+  useEffect(() => {
+    sessionRef.current = session;
+  }, [session]);
 
-  const input = ui.$('input');
-  input.addEventListener('input', autosize);
-  input.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter' && !event.shiftKey) {
-      event.preventDefault();
-      send(input.value);
+  const pushToast = useCallback((message, type = 'info') => {
+    const id = (toastId.current += 1);
+    setToasts((list) => [...list, { id, message, type }]);
+    setTimeout(() => setToasts((list) => list.filter((t) => t.id !== id)), type === 'error' ? 6500 : 3800);
+  }, []);
+
+  const refreshSessions = useCallback(async () => {
+    try {
+      const data = await api.sessions();
+      setSessions(data.sessions || []);
+    } catch (err) {
+      setSessions([]);
     }
-  });
+  }, []);
 
-  document.addEventListener('genesis:open-session', (e) => openSession(e.detail));
-  document.addEventListener('genesis:new-story', openNewStory);
-  document.addEventListener('genesis:choose', (e) => send(e.detail));
-}
-
-// ------------------------------------------------------------- layout
-
-function setSidebar(open) {
-  ui.$('sidebar').classList.toggle('open', open);
-  ui.$('scrim').hidden = !(open || ui.$('panel').classList.contains('open'));
-}
-function toggleSidebar() { setSidebar(!ui.$('sidebar').classList.contains('open')); }
-function setPanel(open) {
-  ui.$('panel').classList.toggle('open', open);
-  ui.$('scrim').hidden = !(open || ui.$('sidebar').classList.contains('open'));
-}
-function togglePanel() { setPanel(!ui.$('panel').classList.contains('open')); }
-function closeDrawers() { setSidebar(false); setPanel(false); }
-
-function autosize() {
-  const input = ui.$('input');
-  input.style.height = 'auto';
-  input.style.height = Math.min(input.scrollHeight, Math.round(window.innerHeight * 0.4)) + 'px';
-}
-
-// ------------------------------------------------------------ sessions
-
-async function refreshSessions() {
-  try {
-    const data = await api.sessions();
-    state.sessions = data.sessions || [];
-  } catch (err) {
-    state.sessions = [];
-  }
-  ui.renderSessions();
-}
-
-async function openSession(id) {
-  try {
-    const session = await api.session(id);
-    state.session = session;
-    state.activity = [];
-    state.choices = [];
-    state.choicesPrompt = '';
-    state.usage = null;
-    localStorage.setItem(LS_KEY, id);
-    ui.renderHeader();
-    ui.renderScene();
-    ui.renderMessages();
-    ui.renderChoices();
-    ui.renderPanel();
-    ui.renderStatus(null);
-    ui.renderSessions();
-    closeDrawers();
-  } catch (err) {
-    ui.toast(err.message, 'error');
-  }
-}
-
-async function deleteCurrent() {
-  if (!state.session) return;
-  if (!confirm('Delete this story? This cannot be undone.')) return;
-  try {
-    await api.deleteSession(state.session.id);
-    state.session = null;
-    localStorage.removeItem(LS_KEY);
-    await refreshSessions();
-    const next = state.sessions[0];
-    if (next) await openSession(next.id);
-    else {
-      ui.renderMessages();
-      ui.renderHeader();
-      ui.renderScene();
-      ui.renderPanel();
+  const openSession = useCallback(async (id) => {
+    try {
+      const data = await api.session(id);
+      setSession(data);
+      setActivity([]);
+      setChoices([]);
+      setUsage(null);
+      setStatus(null);
+      localStorage.setItem(LS_KEY, id);
+      setSidebarOpen(false);
+      setPanelOpen(false);
+    } catch (err) {
+      pushToast(err.message, 'error');
     }
-  } catch (err) {
-    ui.toast(err.message, 'error');
-  }
-}
+  }, [pushToast]);
 
-function openSettings() {
-  const modal = ui.openModal('tpl-settings');
-  if (!modal) return;
-  const cfg = state.config || {};
-  ui.$('cfg-key').placeholder = cfg.hasKey ? '•••••••• (leave blank to keep)' : 'sk-or-...';
-  ui.$('cfg-key-state').textContent = cfg.hasKey ? 'A key is configured.' : 'No key configured yet.';
-  ui.$('cfg-base').value = cfg.baseUrl || '';
-  ui.$('cfg-model').value = cfg.model || '';
-  ui.$('cfg-temp').value = cfg.temperature != null ? cfg.temperature : 1;
-  ui.$('cfg-maxtokens').value = cfg.maxTokens || 2048;
-  ui.$('cfg-maxsteps').value = cfg.maxSteps || 8;
-  ui.$('cfg-toolchoice').value = cfg.toolChoice || 'auto';
-  ui.$('cfg-system').value = cfg.systemPrompt || '';
+  const handleEvent = useCallback((event) => {
+    switch (event.type) {
+      case 'status':
+        setStatus({ status: event.status, step: event.step });
+        break;
+      case 'user_message':
+        setSession((s) => {
+          if (!s) return s;
+          const list = s.messages.slice();
+          const idx = list.findIndex((m) => m.pending);
+          if (idx >= 0) list[idx] = event.message;
+          else list.push(event.message);
+          return { ...s, messages: list };
+        });
+        break;
+      case 'title':
+        setSession((s) => (s ? { ...s, title: event.title } : s));
+        break;
+      case 'message':
+        setSession((s) => (s ? { ...s, messages: [...s.messages, event.message] } : s));
+        break;
+      case 'scene':
+        setSession((s) => (s ? { ...s, scene: event.scene } : s));
+        break;
+      case 'character':
+        setSession((s) => {
+          if (!s) return s;
+          const chars = (s.characters || []).slice();
+          const idx = chars.findIndex((c) => c.id === event.character.id || c.name === event.character.name);
+          if (idx >= 0) chars[idx] = event.character;
+          else chars.push(event.character);
+          return { ...s, characters: chars };
+        });
+        break;
+      case 'memory':
+        setSession((s) => (s ? { ...s, memories: [...(s.memories || []), event.memory] } : s));
+        break;
+      case 'state':
+        setSession((s) => (s ? { ...s, state: event.state } : s));
+        break;
+      case 'choices':
+        setChoices(event.choices || []);
+        break;
+      case 'reasoning':
+        setActivity((list) => [...list, { id: 'think-' + list.length + '-' + Date.now(), name: 'think', done: true, result: event.text }]);
+        break;
+      case 'tool_start':
+        setActivity((list) => [...list, {
+          id: event.tool.id || event.tool.name + '-' + Date.now(),
+          name: event.tool.name,
+          args: event.tool.args ? JSON.stringify(event.tool.args, null, 2) : '',
+          done: false,
+        }]);
+        break;
+      case 'tool_end':
+        setActivity((list) => {
+          const next = list.slice();
+          let idx = next.findIndex((a) => a.id === event.tool.id && !a.done);
+          if (idx < 0) idx = next.findIndex((a) => a.name === event.tool.name && !a.done);
+          const patch = {
+            done: true,
+            error: event.tool.error || '',
+            result: event.tool.result ? JSON.stringify(event.tool.result, null, 2) : '',
+          };
+          if (idx >= 0) next[idx] = { ...next[idx], ...patch };
+          else next.push({ id: event.tool.id || event.tool.name, name: event.tool.name, ...patch });
+          return next;
+        });
+        break;
+      case 'usage':
+        setUsage(event.usage);
+        break;
+      case 'notice':
+        pushToast(event.text);
+        break;
+      case 'error':
+        pushToast(event.error, 'error');
+        break;
+      case 'turn_end':
+        setStatus(null);
+        break;
+      default:
+        break;
+    }
+  }, [pushToast]);
 
-  ui.$('cfg-load-models').addEventListener('click', async () => {
-    const btn = ui.$('cfg-load-models');
-    btn.disabled = true;
-    btn.textContent = '…';
+  const runStream = useCallback(async (path, body) => {
+    if (abortRef.current) return;
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setStreaming(true);
+    try {
+      await api.stream(path, body, handleEvent, controller.signal);
+    } catch (err) {
+      if (err.name !== 'AbortError') pushToast(err.message, 'error');
+    } finally {
+      abortRef.current = null;
+      setStreaming(false);
+      setStatus(null);
+      await refreshSessions();
+    }
+  }, [handleEvent, pushToast, refreshSessions]);
+
+  const send = useCallback(async (text) => {
+    const value = String(text || '').trim();
+    const current = sessionRef.current;
+    if (!value || !current) return;
+    const pending = {
+      id: 'pending-' + Date.now(),
+      role: 'user',
+      kind: 'user',
+      speaker: (current.persona && current.persona.name) || '',
+      text: value,
+      pending: true,
+      createdAt: new Date().toISOString(),
+    };
+    setSession((s) => (s ? { ...s, messages: [...s.messages, pending] } : s));
+    setChoices([]);
+    await runStream('/api/sessions/' + current.id + '/messages', { text: value });
+  }, [runStream]);
+
+  const saveConfig = useCallback(async (body) => {
+    try {
+      setConfig(await api.saveConfig(body));
+      pushToast('Settings saved.');
+      setModal(null);
+    } catch (err) {
+      pushToast(err.message, 'error');
+    }
+  }, [pushToast]);
+
+  const loadModels = useCallback(async () => {
     try {
       const data = await api.models();
-      const list = ui.$('model-options');
-      list.innerHTML = '';
-      (data.models || []).slice(0, 400).forEach((m) => {
-        const option = document.createElement('option');
-        option.value = m.id;
-        option.label = m.name;
-        list.appendChild(option);
-      });
-      ui.toast((data.models || []).length + ' models loaded — start typing to filter.');
+      return (data.models || []).map((m) => ({ id: m.id, name: m.name }));
     } catch (err) {
-      ui.toast(err.message, 'error');
-    } finally {
-      btn.disabled = false;
-      btn.textContent = 'Load';
+      pushToast(err.message, 'error');
+      return [];
     }
-  });
+  }, [pushToast]);
 
-  ui.$('cfg-save').addEventListener('click', async () => {
-    const body = {
-      baseUrl: ui.$('cfg-base').value.trim(),
-      model: ui.$('cfg-model').value.trim(),
-      temperature: Number(ui.$('cfg-temp').value),
-      maxTokens: Number(ui.$('cfg-maxtokens').value),
-      maxSteps: Number(ui.$('cfg-maxsteps').value),
-      toolChoice: ui.$('cfg-toolchoice').value,
-      systemPrompt: ui.$('cfg-system').value,
-    };
-    const key = ui.$('cfg-key').value.trim();
-    if (key) body.apiKey = key;
+  const createStory = useCallback(async (body) => {
     try {
-      state.config = await api.saveConfig(body);
-      ui.toast('Settings saved.');
-      modal.close();
-    } catch (err) {
-      ui.toast(err.message, 'error');
-    }
-  });
-}
-
-function openNewStory() {
-  const modal = ui.openModal('tpl-new');
-  if (!modal) return;
-  ui.$('ns-create').addEventListener('click', async () => {
-    const body = {
-      title: ui.$('ns-title').value.trim(),
-      persona: {
-        name: ui.$('ns-persona-name').value.trim(),
-        description: ui.$('ns-persona-desc').value.trim(),
-      },
-      character: {
-        name: ui.$('ns-char-name').value.trim(),
-        avatar: ui.$('ns-char-avatar').value.trim(),
-        description: ui.$('ns-char-desc').value.trim(),
-        personality: ui.$('ns-char-personality').value.trim(),
-        scenario: ui.$('ns-char-scenario').value.trim(),
-        greeting: ui.$('ns-char-greeting').value.trim(),
-      },
-    };
-    try {
-      const session = await api.createSession(body);
-      modal.close();
-      state.session = session;
-      state.activity = [];
-      state.choices = [];
-      localStorage.setItem(LS_KEY, session.id);
-      ui.renderHeader();
-      ui.renderScene();
-      ui.renderMessages();
-      ui.renderPanel();
-      ui.renderChoices();
+      const created = await api.createSession(body);
+      setModal(null);
+      setSession(created);
+      setActivity([]);
+      setChoices([]);
+      setUsage(null);
+      setStatus(null);
+      localStorage.setItem(LS_KEY, created.id);
+      setSidebarOpen(false);
+      setPanelOpen(false);
       await refreshSessions();
-      closeDrawers();
-      if (!session.messages || !session.messages.length) {
-        await runStream('/api/sessions/' + session.id + '/opening', {});
+      if (!created.messages || !created.messages.length) {
+        await runStream('/api/sessions/' + created.id + '/opening', {});
       }
     } catch (err) {
-      ui.toast(err.message, 'error');
+      pushToast(err.message, 'error');
     }
-  });
-}
+  }, [pushToast, refreshSessions, runStream]);
 
-async function openTools() {
-  const modal = ui.openModal('tpl-tools');
-  if (!modal) return;
-  const list = ui.$('tools-list');
-  try {
-    const data = await api.tools();
-    state.tools = data.tools || [];
-    list.innerHTML = ui.toolsHTML(state.tools);
-  } catch (err) {
-    list.innerHTML = '<p class="muted">' + ui.escapeHTML(err.message) + '</p>';
-  }
-}
+  const openTools = useCallback(async () => {
+    setModal('tools');
+    try {
+      const data = await api.tools();
+      setTools(data.tools || []);
+    } catch (err) {
+      pushToast(err.message, 'error');
+    }
+  }, [pushToast]);
 
-// ------------------------------------------------------------ streaming
+  const openSettings = useCallback(async () => {
+    setModal('settings');
+    try {
+      setConfig(await api.config());
+    } catch (err) {
+      /* keep the last known config */
+    }
+  }, []);
 
-async function send(text) {
-  text = (text || '').trim();
-  if (!text || state.streaming || !state.session) return;
-  state.choices = [];
-  state.choicesPrompt = '';
-  ui.renderChoices();
-  const pending = {
-    id: 'pending-' + Date.now(),
-    role: 'user',
-    kind: 'user',
-    speaker: (state.session.persona && state.session.persona.name) || '',
-    text,
-    pending: true,
-    createdAt: new Date().toISOString(),
+  const deleteCurrent = useCallback(async () => {
+    const current = sessionRef.current;
+    if (!current) return;
+    if (!window.confirm('Delete this story? This cannot be undone.')) return;
+    try {
+      await api.deleteSession(current.id);
+      setSession(null);
+      localStorage.removeItem(LS_KEY);
+      const list = (await api.sessions()).sessions || [];
+      setSessions(list);
+      if (list[0]) await openSession(list[0].id);
+    } catch (err) {
+      pushToast(err.message, 'error');
+    }
+  }, [openSession, pushToast]);
+
+  useEffect(() => {
+    (async () => {
+      let cfg = null;
+      try {
+        cfg = await api.config();
+        setConfig(cfg);
+      } catch (err) {
+        pushToast('Could not load configuration: ' + err.message, 'error');
+      }
+      let list = [];
+      try {
+        list = (await api.sessions()).sessions || [];
+      } catch (err) {
+        list = [];
+      }
+      setSessions(list);
+      const last = localStorage.getItem(LS_KEY);
+      const target = last && list.some((s) => s.id === last) ? last : list[0] && list[0].id;
+      if (target) await openSession(target);
+      if (cfg && !cfg.hasKey) pushToast('Add your OpenRouter API key in Settings to begin.');
+    })();
+  }, []);
+
+  useEffect(() => {
+    const onKey = (event) => {
+      if ((event.metaKey || event.ctrlKey) && event.key === 'Delete') {
+        event.preventDefault();
+        deleteCurrent();
+      }
+      if (event.key === 'Escape') {
+        setModal(null);
+        setSidebarOpen(false);
+        setPanelOpen(false);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [deleteCurrent]);
+
+  const closeDrawers = () => {
+    setSidebarOpen(false);
+    setPanelOpen(false);
   };
-  state.session.messages.push(pending);
-  ui.appendMessage(pending);
-  ui.$('input').value = '';
-  autosize();
-  await runStream('/api/sessions/' + state.session.id + '/messages', { text });
+
+  return html`
+    <${Fragment}>
+      <${C.Sidebar}
+        sessions=${sessions}
+        activeId=${session && session.id}
+        open=${sidebarOpen}
+        onOpen=${openSession}
+        onNew=${() => setModal('new')}
+        onSettings=${openSettings}
+        onTools=${openTools}
+      />
+      ${(sidebarOpen || panelOpen) && html`
+        <div class="scrim" onClick=${closeDrawers}></div>`}
+      <main class="main">
+        <${C.Topbar}
+          session=${session}
+          usage=${usage}
+          onMenu=${() => setSidebarOpen((v) => !v)}
+          onPanel=${() => setPanelOpen((v) => !v)}
+        />
+        <${C.SceneBar} scene=${session && session.scene} />
+        <${C.MessageList} session=${session} streaming=${streaming} onNewStory=${() => setModal('new')} />
+        <${C.StatusBar} status=${status && status.status} step=${status && status.step} />
+        <${C.Choices} choices=${choices} onChoose=${send} />
+        <${C.Composer}
+          streaming=${streaming}
+          disabled=${!session}
+          onSend=${send}
+          onStop=${() => { if (abortRef.current) abortRef.current.abort(); }}
+        />
+      </main>
+      <${C.Panel}
+        session=${session}
+        activity=${activity}
+        open=${panelOpen}
+        onClose=${() => setPanelOpen(false)}
+      />
+      ${modal === 'settings' && html`
+        <${C.SettingsModal}
+          config=${config}
+          onClose=${() => setModal(null)}
+          onSave=${saveConfig}
+          onLoadModels=${loadModels}
+        />`}
+      ${modal === 'new' && html`
+        <${C.NewStoryModal} onClose=${() => setModal(null)} onCreate=${createStory} />`}
+      ${modal === 'tools' && html`
+        <${C.ToolsModal} tools=${tools} onClose=${() => setModal(null)} />`}
+      <${C.Toasts} toasts=${toasts} />
+    <//>`;
 }
 
-async function runStream(path, body) {
-  if (state.streaming) return;
-  const controller = new AbortController();
-  state.abort = controller;
-  state.streaming = true;
-  ui.setStreaming(true);
-  try {
-    await api.stream(path, body, handleEvent, controller.signal);
-  } catch (err) {
-    if (err.name !== 'AbortError') ui.toast(err.message, 'error');
-  } finally {
-    state.streaming = false;
-    state.abort = null;
-    ui.setStreaming(false);
-    await refreshSessions();
-  }
+export function mount() {
+  const root = document.getElementById('app');
+  if (root) render(html`<${App} />`, root);
 }
 
-function reconcileUser(message) {
-  if (!state.session) return;
-  const index = state.session.messages.findIndex((m) => m.pending);
-  if (index >= 0) state.session.messages[index] = message;
-  else state.session.messages.push(message);
-  ui.renderMessages();
+if (typeof document !== 'undefined') {
+  mount();
 }
-
-function upsertCharacter(character) {
-  if (!state.session || !character) return;
-  state.session.characters = state.session.characters || [];
-  const index = state.session.characters.findIndex((c) => c.id === character.id || c.name === character.name);
-  if (index >= 0) state.session.characters[index] = character;
-  else state.session.characters.push(character);
-}
-
-function addActivity(item) {
-  state.activity.push(item);
-  if (state.activity.length > 60) state.activity.shift();
-  ui.renderPanel();
-}
-
-function finishActivity(tool) {
-  const item = state.activity.find((a) => a.id === tool.id && !a.done) ||
-    state.activity.find((a) => a.name === tool.name && !a.done);
-  if (item) {
-    item.done = true;
-    item.error = tool.error || '';
-    item.result = tool.result ? JSON.stringify(tool.result, null, 2) : '';
-  } else {
-    state.activity.push({ id: tool.id || tool.name, name: tool.name, done: true, error: tool.error || '', result: tool.result ? JSON.stringify(tool.result, null, 2) : '' });
-  }
-  ui.renderPanel();
-}
-
-function handleEvent(event) {
-  switch (event.type) {
-    case 'status':
-      ui.renderStatus(event.status, event.step);
-      break;
-    case 'user_message':
-      reconcileUser(event.message);
-      break;
-    case 'title':
-      if (state.session) {
-        state.session.title = event.title;
-        ui.renderHeader();
-      }
-      break;
-    case 'message':
-      if (event.message && state.session) {
-        state.session.messages.push(event.message);
-        ui.appendMessage(event.message);
-      }
-      break;
-    case 'scene':
-      if (state.session) {
-        state.session.scene = event.scene;
-        ui.renderScene();
-        ui.renderPanel();
-      }
-      break;
-    case 'character':
-      upsertCharacter(event.character);
-      ui.renderPanel();
-      break;
-    case 'memory':
-      if (state.session && event.memory) {
-        state.session.memories = state.session.memories || [];
-        state.session.memories.push(event.memory);
-        ui.renderPanel();
-      }
-      break;
-    case 'state':
-      if (state.session) {
-        state.session.state = event.state;
-        ui.renderPanel();
-      }
-      break;
-    case 'choices':
-      state.choices = event.choices || [];
-      state.choicesPrompt = event.prompt || '';
-      ui.renderChoices();
-      break;
-    case 'reasoning':
-      addActivity({ id: 'think-' + Date.now(), name: 'think', done: true, result: event.text });
-      break;
-    case 'tool_start':
-      addActivity({ id: event.tool.id || (event.tool.name + '-' + Date.now()), name: event.tool.name, args: event.tool.args ? JSON.stringify(event.tool.args, null, 2) : '', done: false });
-      break;
-    case 'tool_end':
-      finishActivity(event.tool);
-      break;
-    case 'usage':
-      state.usage = event.usage;
-      ui.renderHeader();
-      break;
-    case 'notice':
-      ui.toast(event.text);
-      break;
-    case 'error':
-      ui.toast(event.error, 'error');
-      break;
-    case 'turn_end':
-      ui.renderStatus(null);
-      break;
-    default:
-      console.debug('genesis: unhandled event', event);
-  }
-}
-
-// Expose delete for keyboard shortcut.
-window.addEventListener('keydown', (event) => {
-  if (event.key === 'Delete' && (event.metaKey || event.ctrlKey)) deleteCurrent();
-});
-
-boot();

@@ -1,0 +1,6 @@
+{
+  "name": "genesis-web",
+  "private": true,
+  "type": "module",
+  "//": "No dependencies and no build step. This file exists only so Node treats the browser ESM sources as modules for the render smoke test in test/."
+}

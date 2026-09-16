@@ -4,5 +4,8 @@ package web
 
 import "embed"
 
-//go:embed index.html app.css app.js api.js ui.js store.js
+// Files holds the browser client. Preact and htm are vendored as plain ESM
+// builds, so there is no npm install and no bundler step.
+//
+//go:embed index.html app.css app.js api.js format.js components.js vendor/preact.module.js vendor/hooks.module.js vendor/htm.module.js
 var Files embed.FS
