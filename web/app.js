@@ -321,6 +321,16 @@ export function App() {
     }
   }, [pushToast]);
 
+  const loadSpeechModels = useCallback(async () => {
+    try {
+      const data = await api.speechModels();
+      return data.models || [];
+    } catch (err) {
+      pushToast(err.message, 'error');
+      return [];
+    }
+  }, [pushToast]);
+
   const createStory = useCallback(async (data) => {
     try {
       const chars = (data.characters || []).filter((c) => (c.name || '').trim());
@@ -526,11 +536,14 @@ export function App() {
         onEditCast=${() => setModal('cast')}
       />
       ${modal === 'settings' && html`
-        <${C.SettingsModal} config=${config} onClose=${() => setModal(null)} onSave=${saveConfig} onLoadModels=${loadModels} />`}
+        <${C.SettingsModal} config=${config} onClose=${() => setModal(null)} onSave=${saveConfig}
+                            onLoadModels=${loadModels} onLoadSpeechModels=${loadSpeechModels} />`}
       ${modal === 'new' && html`
-        <${C.NewStoryModal} config=${config} onClose=${() => setModal(null)} onCreate=${createStory} />`}
+        <${C.NewStoryModal} config=${config} onClose=${() => setModal(null)} onCreate=${createStory}
+                            onLoadSpeechModels=${loadSpeechModels} />`}
       ${modal === 'cast' && session && html`
-        <${C.CastModal} session=${session} onClose=${() => setModal(null)} onSave=${saveCast} />`}
+        <${C.CastModal} session=${session} onClose=${() => setModal(null)} onSave=${saveCast}
+                        speechModel=${config && config.speechModel} onLoadSpeechModels=${loadSpeechModels} />`}
       ${modal === 'tools' && html`
         <${C.ToolsModal} tools=${tools} onClose=${() => setModal(null)} />`}
       <${C.Toasts} toasts=${toasts} />

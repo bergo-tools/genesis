@@ -1,13 +1,18 @@
 package server
 
 import (
+	"context"
 	"crypto/sha1"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
+	"github.com/zp/genesis/internal/config"
 	"github.com/zp/genesis/internal/llm"
 	"github.com/zp/genesis/internal/store"
 )
@@ -140,4 +145,74 @@ func findMessage(sess *store.Session, id string) *store.Message {
 		}
 	}
 	return nil
+}
+
+// speechModelInfo is a TTS model together with the voices that model accepts.
+// Each provider names its voices differently, so the catalog is per model.
+type speechModelInfo struct {
+	ID     string   `json:"id"`
+	Name   string   `json:"name"`
+	Voices []string `json:"voices"`
+}
+
+func (s *Server) handleSpeechModels(w http.ResponseWriter, r *http.Request) {
+	c := s.cfg.Get()
+	if strings.TrimSpace(c.APIKey) == "" {
+		writeError(w, http.StatusBadRequest, errors.New("add an API key before listing speech models"))
+		return
+	}
+	models, err := fetchSpeechModels(r.Context(), c.BaseURL, c.APIKey)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"models": models})
+}
+
+// fetchSpeechModels lists TTS models and their supported voices. OpenRouter
+// exposes the catalog on the model object as "supported_voices"; filtering by
+// output_modalities=speech keeps the response small.
+func fetchSpeechModels(ctx context.Context, baseURL, apiKey string) ([]speechModelInfo, error) {
+	base := strings.TrimRight(baseURL, "/")
+	if base == "" {
+		base = config.Default().BaseURL
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/models?output_modalities=speech", nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("Accept", "application/json")
+	client := &http.Client{Timeout: 20 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	if resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("provider: %s", strings.TrimSpace(string(body)))
+	}
+	var parsed struct {
+		Data []struct {
+			ID     string   `json:"id"`
+			Name   string   `json:"name"`
+			Voices []string `json:"supported_voices"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return nil, err
+	}
+	out := make([]speechModelInfo, 0, len(parsed.Data))
+	for _, m := range parsed.Data {
+		if strings.TrimSpace(m.ID) == "" {
+			continue
+		}
+		name := m.Name
+		if name == "" {
+			name = m.ID
+		}
+		out = append(out, speechModelInfo{ID: m.ID, Name: name, Voices: m.Voices})
+	}
+	return out, nil
 }

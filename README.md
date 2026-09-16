@@ -151,6 +151,7 @@ func weatherTool() *agent.Tool {
 | `POST /api/sessions/{id}/assets` | 上传图片（multipart `file`），返回 `{name, url}` |
 | `GET /api/sessions/{id}/assets/{name}` | 读取图片或合成音频 |
 | `POST /api/sessions/{id}/speech` | 朗读文本块：`{text, speaker}` 或 `{messageId}`，返回音频 |
+| `GET /api/speech/models` | 列出 TTS 模型及其音色目录（`supported_voices`） |
 
 事件类型：`status`、`user_message`、`message`、`state`、`choices`、`reasoning`、
 `tool_start`、`tool_end`、`usage`、`notice`、`error`、`turn_end`、`title`。
@@ -170,13 +171,15 @@ func weatherTool() *agent.Tool {
 
 - **可配置 speech 模型**：默认 `hexgrad/kokoro-82m`（音色 `af_heart`），在 Settings 中修改；
   输出格式支持 mp3 / wav / opus / aac / flac / pcm，并支持播放速度。
-  可用 `GET https://openrouter.ai/api/v1/models?output_modalities=speech` 发现全部语音模型。
-  已实测可返回音频的模型：`hexgrad/kokoro-82m`、`deepgram/flux-tts:free`（免费，需显式音色，
-  如 `flux-alexis-en`）。**各模型音色命名不同**（Kokoro 用 `af_heart`，Deepgram 用 `flux-*-en`），
-  用错音色会返回 provider 的具体报错。
+  已实测可返回音频的模型：`hexgrad/kokoro-82m`、`deepgram/flux-tts:free`（免费）。
 - **逐块朗读**：每条消息旁有 🔊 按钮，点击朗读该块，再点停止。
-- **音色**：角色卡可单独设置 `voice`（如 `alloy` / `shimmer`）；朗读时优先使用角色音色，
-  否则回退到全局默认音色，旁白使用全局音色。
+- **音色按模型不同**：OpenRouter 在模型对象上给出 `supported_voices`，**每个 TTS 模型一套**
+  （例如 Kokoro 54 个、Deepgram Flux 36 个，命名风格完全不同：`af_heart` vs `flux-alexis-en`）。
+  后端 `GET /api/speech/models` 返回 `{id, name, voices}`；前端把「默认音色」和「角色音色」
+  都做成 **datalist 自动补全**，选中某个 speech 模型后只提示该模型支持的音色
+  （少数模型没有音色目录，此时自由输入，用错会返回 provider 的具体报错）。
+- **音色覆盖顺序**：请求显式 `voice` > 角色卡 `voice`（按 `speaker` 匹配）> 全局默认音色；
+  旁白使用全局默认音色。
 - **可选自动朗读**：Settings 打开 `autoSpeak` 后，新消息按顺序自动朗读。
 - **缓存**：合成结果按 `模型|音色|格式|文本` 内容寻址缓存到该 story 的 `assets/` 下，
   同一文本块重复朗读不会再次调用模型。

@@ -278,7 +278,7 @@ export function Panel({ session, activity, open, onClose, onEditCast }) {
     </aside>`;
 }
 
-export function CharacterEditor({ character, index, sessionId, onChange, onRemove, canRemove }) {
+export function CharacterEditor({ character, index, sessionId, onChange, onRemove, canRemove, voiceOptions }) {
   const set = (key) => (e) => onChange(index, { [key]: e.currentTarget.value });
   const pick = (e) => {
     const file = e.currentTarget.files && e.currentTarget.files[0];
@@ -306,7 +306,11 @@ export function CharacterEditor({ character, index, sessionId, onChange, onRemov
             <input type="text" value=${character.personality} placeholder="Dry, patient, secretly sentimental."
                    onInput=${set('personality')} /></label>
           <label class="field"><span>Voice (TTS)</span>
-            <input type="text" value=${character.voice} placeholder="alloy" onInput=${set('voice')} /></label>
+            <input type="text" value=${character.voice} list=${'voice-' + character.key}
+                   placeholder="af_heart" onInput=${set('voice')} />
+            <datalist id=${'voice-' + character.key}>
+              ${(voiceOptions || []).map((v) => html`<option value=${v} key=${v}></option>`)}
+            </datalist></label>
         </div>
       </div>
     </div>`;
@@ -321,7 +325,7 @@ function ReasoningSelect({ value, onChange }) {
     </label>`;
 }
 
-export function SettingsModal({ config, onClose, onSave, onLoadModels }) {
+export function SettingsModal({ config, onClose, onSave, onLoadModels, onLoadSpeechModels }) {
   const cfg = config || {};
   const [form, setForm] = useState({
     apiKey: '',
@@ -341,7 +345,20 @@ export function SettingsModal({ config, onClose, onSave, onLoadModels }) {
     autoSpeak: cfg.autoSpeak === true,
   });
   const [models, setModels] = useState([]);
+  const [speechModels, setSpeechModels] = useState([]);
   const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    if (onLoadSpeechModels) {
+      onLoadSpeechModels().then((list) => {
+        if (alive) setSpeechModels(list || []);
+      });
+    }
+    return () => {
+      alive = false;
+    };
+  }, [onLoadSpeechModels]);
+  const voiceOptions = ((speechModels.find((m) => m.id === form.speechModel) || {}).voices) || [];
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.currentTarget.value }));
   const load = async () => {
     setBusy(true);
@@ -410,8 +427,13 @@ export function SettingsModal({ config, onClose, onSave, onLoadModels }) {
             <label class="field"><span>Speech model</span>
               <input type="text" placeholder="openai/gpt-4o-mini-tts" value=${form.speechModel} onInput=${set('speechModel')} /></label>
             <label class="field"><span>Default voice</span>
-              <input type="text" placeholder="alloy" value=${form.speechVoice} onInput=${set('speechVoice')} /></label>
+              <input type="text" list="speech-voice-options" placeholder="af_heart"
+                     value=${form.speechVoice} onInput=${set('speechVoice')} />
+              <span class="hint">${voiceOptions.length + ' voices for this model'}</span></label>
           </div>
+          <datalist id="speech-voice-options">
+            ${voiceOptions.map((v) => html`<option value=${v} key=${v}></option>`)}
+          </datalist>
           <div class="row">
             <label class="field"><span>Format</span>
               <select value=${form.speechFormat} onChange=${set('speechFormat')}>
@@ -452,8 +474,21 @@ function newCharacter() {
   return { key: 'c' + Math.random().toString(36).slice(2), id: '', name: '', description: '', personality: '', avatar: '', voice: '', avatarFile: null, avatarPreview: '' };
 }
 
-export function NewStoryModal({ config, onClose, onCreate }) {
+export function NewStoryModal({ config, onClose, onCreate, onLoadSpeechModels }) {
   const cfg = config || {};
+  const [speechModels, setSpeechModels] = useState([]);
+  useEffect(() => {
+    let alive = true;
+    if (onLoadSpeechModels) {
+      onLoadSpeechModels().then((list) => {
+        if (alive) setSpeechModels(list || []);
+      });
+    }
+    return () => {
+      alive = false;
+    };
+  }, [onLoadSpeechModels]);
+  const voiceOptions = ((speechModels.find((m) => m.id === cfg.speechModel) || {}).voices) || [];
   const [title, setTitle] = useState('');
   const [personaName, setPersonaName] = useState('');
   const [personaDesc, setPersonaDesc] = useState('');
@@ -515,7 +550,7 @@ export function NewStoryModal({ config, onClose, onCreate }) {
             </div>
             ${characters.map((c, i) => html`
               <div key=${c.key} style="margin-top:10px">
-                <${CharacterEditor} character=${c} index=${i} sessionId=${''}
+                <${CharacterEditor} character=${c} index=${i} sessionId=${''} voiceOptions=${voiceOptions}
                   onChange=${update} onRemove=${remove} canRemove=${characters.length > 1} />
               </div>`)}
           </div>
@@ -541,7 +576,20 @@ export function NewStoryModal({ config, onClose, onCreate }) {
     </div>`;
 }
 
-export function CastModal({ session, onClose, onSave }) {
+export function CastModal({ session, onClose, onSave, speechModel, onLoadSpeechModels }) {
+  const [speechModels, setSpeechModels] = useState([]);
+  useEffect(() => {
+    let alive = true;
+    if (onLoadSpeechModels) {
+      onLoadSpeechModels().then((list) => {
+        if (alive) setSpeechModels(list || []);
+      });
+    }
+    return () => {
+      alive = false;
+    };
+  }, [onLoadSpeechModels]);
+  const voiceOptions = ((speechModels.find((m) => m.id === speechModel) || {}).voices) || [];
   const [title, setTitle] = useState((session && session.title) || '');
   const [avatar, setAvatar] = useState((session && session.avatar) || '');
   const [avatarFile, setAvatarFile] = useState(null);
@@ -597,7 +645,7 @@ export function CastModal({ session, onClose, onSave }) {
             </div>
             ${characters.map((c, i) => html`
               <div key=${c.key} style="margin-top:10px">
-                <${CharacterEditor} character=${c} index=${i} sessionId=${session ? session.id : ''}
+                <${CharacterEditor} character=${c} index=${i} sessionId=${session ? session.id : ''} voiceOptions=${voiceOptions}
                   onChange=${update} onRemove=${remove} canRemove=${characters.length > 1} />
               </div>`)}
           </div>

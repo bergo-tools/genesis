@@ -35,6 +35,7 @@ export const api = {
   saveConfig: (c) => fetch('/api/config', { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(c) }).then(toJSON),
   models: () => fetch('/api/models').then(toJSON),
   tools: () => fetch('/api/tools').then(toJSON),
+  speechModels: () => fetch('/api/speech/models').then(toJSON),
   sessions: () => fetch('/api/sessions').then(toJSON),
   createSession: (body) => fetch('/api/sessions', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(body) }).then(toJSON),
   session: (id) => fetch('/api/sessions/' + encodeURIComponent(id)).then(toJSON),
