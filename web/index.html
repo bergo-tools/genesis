@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+<meta name="theme-color" content="#0e0f15">
+<title>Genesis · Agentic Roleplay</title>
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<div id="app">
+  <aside id="sidebar" class="sidebar" aria-label="Sessions">
+    <div class="sidebar-head">
+      <span class="brand"><span class="brand-mark">◆</span> Genesis</span>
+      <button id="new-session" class="btn btn-primary btn-sm" type="button">New story</button>
+    </div>
+    <nav id="session-list" class="session-list"></nav>
+    <div class="sidebar-foot">
+      <button id="open-tools" class="btn btn-ghost btn-sm" type="button">Tools</button>
+      <button id="open-settings" class="btn btn-ghost btn-sm" type="button">Settings</button>
+    </div>
+  </aside>
+  <div id="scrim" class="scrim" hidden></div>
+
+  <main class="main">
+    <header class="topbar">
+      <button id="menu-toggle" class="icon-btn" type="button" aria-label="Toggle sessions">☰</button>
+      <div class="topbar-title">
+        <span id="chat-title">Genesis</span>
+        <small id="chat-subtitle">agentic roleplay</small>
+      </div>
+      <button id="panel-toggle" class="icon-btn" type="button" aria-label="Toggle world panel">◧</button>
+    </header>
+
+    <section id="scene-bar" class="scene-bar" hidden></section>
+    <section id="messages" class="messages" aria-live="polite"></section>
+    <section id="status-bar" class="status-bar" hidden></section>
+    <section id="choices" class="choices" hidden></section>
+
+    <footer class="composer">
+      <textarea id="input" rows="1" placeholder="What do you do?" autocomplete="off"></textarea>
+      <button id="send" class="btn btn-primary" type="button">Send</button>
+      <button id="stop" class="btn btn-danger" type="button" hidden>Stop</button>
+    </footer>
+  </main>
+
+  <aside id="panel" class="panel" aria-label="World state">
+    <div class="panel-head">
+      <span>World</span>
+      <button id="panel-close" class="icon-btn" type="button" aria-label="Close">×</button>
+    </div>
+    <div class="panel-body">
+      <section class="panel-section">
+        <h3>Scene</h3>
+        <div id="panel-scene" class="panel-scene muted">Not established yet.</div>
+      </section>
+      <section class="panel-section">
+        <h3>Characters</h3>
+        <div id="panel-characters" class="char-list"></div>
+      </section>
+      <section class="panel-section">
+        <h3>World state</h3>
+        <pre id="panel-state" class="state-json">{}</pre>
+      </section>
+      <section class="panel-section">
+        <h3>Memories</h3>
+        <div id="panel-memories" class="mem-list"></div>
+      </section>
+      <section class="panel-section">
+        <h3>Agent activity</h3>
+        <div id="panel-activity" class="activity-list"><p class="muted">No tool calls yet.</p></div>
+      </section>
+    </div>
+  </aside>
+</div>
+
+<div id="modal-root"></div>
+
+<template id="tpl-settings">
+  <div class="modal">
+    <div class="modal-card">
+      <header class="modal-head"><h2>Settings</h2><button class="icon-btn" data-close type="button">×</button></header>
+      <div class="modal-body">
+        <label class="field"><span>API key</span>
+          <input id="cfg-key" type="password" placeholder="sk-or-... (leave blank to keep current)">
+        </label>
+        <p id="cfg-key-state" class="hint"></p>
+        <label class="field"><span>Base URL</span><input id="cfg-base" type="text"></label>
+        <div class="row">
+          <label class="field grow"><span>Model</span><input id="cfg-model" type="text" list="model-options"></label>
+          <button id="cfg-load-models" class="btn btn-ghost btn-sm" type="button">Load</button>
+        </div>
+        <datalist id="model-options"></datalist>
+        <div class="row">
+          <label class="field"><span>Temperature</span><input id="cfg-temp" type="number" min="0" max="2" step="0.05"></label>
+          <label class="field"><span>Max tokens</span><input id="cfg-maxtokens" type="number" min="64" step="64"></label>
+          <label class="field"><span>Max steps</span><input id="cfg-maxsteps" type="number" min="1" max="40"></label>
+        </div>
+        <label class="field"><span>Tool choice</span>
+          <select id="cfg-toolchoice">
+            <option value="auto">auto</option>
+            <option value="required">required (force a tool call)</option>
+            <option value="none">none</option>
+          </select>
+        </label>
+        <label class="field"><span>Global director instructions</span><textarea id="cfg-system" rows="4" placeholder="Extra standing instructions appended to every system prompt."></textarea></label>
+      </div>
+      <footer class="modal-foot">
+        <button class="btn btn-ghost" data-close type="button">Cancel</button>
+        <button id="cfg-save" class="btn btn-primary" type="button">Save</button>
+      </footer>
+    </div>
+  </div>
+</template>
+
+<template id="tpl-new">
+  <div class="modal">
+    <div class="modal-card">
+      <header class="modal-head"><h2>New story</h2><button class="icon-btn" data-close type="button">×</button></header>
+      <div class="modal-body">
+        <label class="field"><span>Title</span><input id="ns-title" type="text" placeholder="Optional"></label>
+        <div class="grid-2">
+          <label class="field"><span>Your name</span><input id="ns-persona-name" type="text" placeholder="The player"></label>
+          <label class="field"><span>Your description</span><input id="ns-persona-desc" type="text" placeholder="A wandering cartographer"></label>
+        </div>
+        <hr>
+        <div class="grid-2">
+          <label class="field"><span>Character name</span><input id="ns-char-name" type="text" placeholder="Ilyra"></label>
+          <label class="field"><span>Avatar (emoji)</span><input id="ns-char-avatar" type="text" maxlength="4" placeholder="🜁"></label>
+        </div>
+        <label class="field"><span>Description</span><textarea id="ns-char-desc" rows="2" placeholder="An archivist who guards a drowned library."></textarea></label>
+        <label class="field"><span>Personality</span><textarea id="ns-char-personality" rows="2" placeholder="Dry, patient, secretly sentimental."></textarea></label>
+        <label class="field"><span>Scenario</span><textarea id="ns-char-scenario" rows="2" placeholder="The player washed ashore during a storm."></textarea></label>
+        <label class="field"><span>Opening message</span><textarea id="ns-char-greeting" rows="2" placeholder="Leave blank to let the agent open the scene."></textarea></label>
+      </div>
+      <footer class="modal-foot">
+        <button class="btn btn-ghost" data-close type="button">Cancel</button>
+        <button id="ns-create" class="btn btn-primary" type="button">Create</button>
+      </footer>
+    </div>
+  </div>
+</template>
+
+<template id="tpl-tools">
+  <div class="modal">
+    <div class="modal-card">
+      <header class="modal-head"><h2>Registered tools</h2><button class="icon-btn" data-close type="button">×</button></header>
+      <div class="modal-body"><div id="tools-list" class="tools-list"></div></div>
+      <footer class="modal-foot">
+        <p class="hint">Every model output is a tool call. Add a tool in Go with <code>registry.Register(...)</code>.</p>
+        <button class="btn btn-ghost" data-close type="button">Close</button>
+      </footer>
+    </div>
+  </div>
+</template>
+
+<script type="module" src="/app.js"></script>
+</body>
+</html>

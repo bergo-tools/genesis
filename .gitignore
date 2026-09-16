@@ -1,0 +1,15 @@
+.env
+AGENTS.md
+*.log
+config.json
+llm_sessions/
+.gopath/
+.gocache/
+dist/
+/genesis
+/genesis-*
+tmpdata/
+tmpcheck/
+.DS_Store
+*.test
+coverage.out
