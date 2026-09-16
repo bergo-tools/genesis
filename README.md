@@ -29,6 +29,7 @@ OpenRouter 的 chat 接口由官方 SDK [`github.com/OpenRouterTeam/go-sdk`](htt
   一起发给模型，具备视觉能力的模型可以直接看到。
 - **重新 roll**：一键丢弃上一轮 AI 输出并重写，换一个走向。
 - **思考强度可调**：off / minimal / low / medium / high / max（关闭思考即 off）。
+- **语音（TTS）**：通过 OpenRouter 合成语音，可配置 speech 模型与音色，逐块朗读任意文本。
 - **每个 story 一个目录**，删掉目录即彻底清理，便于备份与批量删除。
 - **流式 agent 循环**：NDJSON 事件流实时推送 thinking、工具调用、消息、状态、选项与用量。
 - **持久化**：story 以 JSON 原子写入；配置在 `config.json`（API key 可来自 `.env`）。
@@ -87,7 +88,8 @@ make build                  # 产物：dist/genesis
 ### 环境变量
 
 `OPENROUTER_API_KEY`、`OPENROUTER_BASE_URL`、`GENESIS_MODEL`、`GENESIS_ADDR`、
-`GENESIS_DATA_DIR`、`GENESIS_REASONING_EFFORT`。环境变量优先于 `config.json`。
+`GENESIS_DATA_DIR`、`GENESIS_REASONING_EFFORT`、`GENESIS_SPEECH_MODEL`、
+`GENESIS_SPEECH_VOICE`。环境变量优先于 `config.json`。
 
 ## 添加一个工具
 
@@ -147,7 +149,8 @@ func weatherTool() *agent.Tool {
 | `POST /api/sessions/{id}/opening` | 让 agent 无输入地开场 |
 | `POST /api/sessions/{id}/regenerate` | 重新 roll：丢弃上一轮 AI 输出并重写 |
 | `POST /api/sessions/{id}/assets` | 上传图片（multipart `file`），返回 `{name, url}` |
-| `GET /api/sessions/{id}/assets/{name}` | 读取图片 |
+| `GET /api/sessions/{id}/assets/{name}` | 读取图片或合成音频 |
+| `POST /api/sessions/{id}/speech` | 朗读文本块：`{text, speaker}` 或 `{messageId}`，返回音频 |
 
 事件类型：`status`、`user_message`、`message`、`state`、`choices`、`reasoning`、
 `tool_start`、`tool_end`、`usage`、`notice`、`error`、`turn_end`、`title`。
@@ -160,6 +163,22 @@ func weatherTool() *agent.Tool {
 - **多模态**：聊天图片在构造请求时读取资源并转成 `data:image/...;base64` 内容块；
   持久化只存文件名，不会把 base64 写进 `story.json`。
 - system prompt 每次请求根据角色卡、世界状态与提示重建；history 只存 user/assistant/tool。
+
+## 语音（TTS）
+
+通过 OpenRouter 的 `/audio/speech` 合成语音，用来朗读**指定的文本块**：
+
+- **可配置 speech 模型**：默认 `openai/gpt-4o-mini-tts`，在 Settings 中修改；输出格式支持
+  mp3 / wav / opus / aac / flac / pcm，并支持播放速度。
+- **逐块朗读**：每条消息旁有 🔊 按钮，点击朗读该块，再点停止。
+- **音色**：角色卡可单独设置 `voice`（如 `alloy` / `shimmer`）；朗读时优先使用角色音色，
+  否则回退到全局默认音色，旁白使用全局音色。
+- **可选自动朗读**：Settings 打开 `autoSpeak` 后，新消息按顺序自动朗读。
+- **缓存**：合成结果按 `模型|音色|格式|文本` 内容寻址缓存到该 story 的 `assets/` 下，
+  同一文本块重复朗读不会再次调用模型。
+
+端点：`POST /api/sessions/{id}/speech`，请求体 `{ text, speaker }` 或 `{ messageId }`，
+也可显式传 `voice` / `force`。
 
 ## 前端技术栈
 

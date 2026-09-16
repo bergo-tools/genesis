@@ -53,6 +53,7 @@ type Character struct {
 	Description string    `json:"description,omitempty"`
 	Personality string    `json:"personality,omitempty"`
 	Avatar      string    `json:"avatar,omitempty"`
+	Voice       string    `json:"voice,omitempty"`
 	CreatedAt   time.Time `json:"createdAt"`
 }
 

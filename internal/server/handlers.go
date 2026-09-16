@@ -189,6 +189,7 @@ type characterInput struct {
 	Description string `json:"description"`
 	Personality string `json:"personality"`
 	Avatar      string `json:"avatar"`
+	Voice       string `json:"voice"`
 }
 
 func toCharacter(in characterInput) *store.Character {
@@ -206,6 +207,7 @@ func toCharacter(in characterInput) *store.Character {
 		Description: strings.TrimSpace(in.Description),
 		Personality: strings.TrimSpace(in.Personality),
 		Avatar:      strings.TrimSpace(in.Avatar),
+		Voice:       strings.TrimSpace(in.Voice),
 		CreatedAt:   time.Now().UTC(),
 	}
 }
@@ -481,19 +483,7 @@ func (s *Server) handleAssetUpload(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAssetGet(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	name := r.PathValue("name")
-	f, err := s.store.OpenAsset(id, name)
-	if err != nil {
-		writeError(w, statusFor(err), err)
-		return
-	}
-	defer f.Close()
-	w.Header().Set("Content-Type", mimeForAsset(name))
-	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.WriteHeader(http.StatusOK)
-	_, _ = io.Copy(w, f)
+	s.serveAsset(w, r.PathValue("id"), r.PathValue("name"))
 }
 
 func mimeForAsset(name string) string {
@@ -504,8 +494,22 @@ func mimeForAsset(name string) string {
 		return "image/gif"
 	case ".webp":
 		return "image/webp"
-	default:
+	case ".jpg", ".jpeg":
 		return "image/jpeg"
+	case ".mp3":
+		return "audio/mpeg"
+	case ".wav":
+		return "audio/wav"
+	case ".opus", ".ogg":
+		return "audio/ogg"
+	case ".aac":
+		return "audio/aac"
+	case ".flac":
+		return "audio/flac"
+	case ".pcm":
+		return "application/octet-stream"
+	default:
+		return "application/octet-stream"
 	}
 }
 

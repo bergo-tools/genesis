@@ -22,14 +22,22 @@ export function App() {
   const [toasts, setToasts] = useState([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [speaking, setSpeaking] = useState(null);
 
   const abortRef = useRef(null);
   const sessionRef = useRef(null);
+  const configRef = useRef(null);
+  const speakRef = useRef(null);
+  const speechRef = useRef({ current: null, queue: [], busy: false });
   const toastId = useRef(0);
 
   useEffect(() => {
     sessionRef.current = session;
   }, [session]);
+
+  useEffect(() => {
+    configRef.current = config;
+  }, [config]);
 
   const pushToast = useCallback((message, type = 'info') => {
     const id = (toastId.current += 1);
@@ -82,6 +90,10 @@ export function App() {
         break;
       case 'message':
         setSession((s) => (s ? { ...s, messages: [...s.messages, event.message] } : s));
+        if (event.message && event.message.role === 'assistant' && event.message.text
+            && configRef.current && configRef.current.autoSpeak && speakRef.current) {
+          speakRef.current(event.message);
+        }
         break;
       case 'state':
         setSession((s) => (s ? { ...s, state: event.state } : s));
@@ -207,6 +219,88 @@ export function App() {
     if (abortRef.current) abortRef.current.abort();
   }, []);
 
+  const stopSpeech = useCallback(() => {
+    const st = speechRef.current;
+    st.queue.length = 0;
+    if (st.current) {
+      try {
+        st.current.audio.pause();
+      } catch (err) {
+        /* already stopped */
+      }
+      URL.revokeObjectURL(st.current.url);
+      st.current = null;
+    }
+    st.busy = false;
+    setSpeaking(null);
+  }, []);
+
+  const runSpeechQueue = useCallback(async () => {
+    const st = speechRef.current;
+    if (st.busy) return;
+    st.busy = true;
+    while (st.queue.length) {
+      const item = st.queue.shift();
+      try {
+        setSpeaking(item.id);
+        const res = await fetch('/api/sessions/' + item.sessionId + '/speech', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: item.text, speaker: item.speaker }),
+        });
+        if (!res.ok) {
+          let message = res.status + ' ' + res.statusText;
+          try {
+            const body = await res.json();
+            if (body && body.error) message = body.error;
+          } catch (err) {
+            /* not json */
+          }
+          throw new Error(message);
+        }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        st.current = { id: item.id, audio, url };
+        await new Promise((resolve) => {
+          audio.onended = resolve;
+          audio.onerror = resolve;
+          audio.play().catch(resolve);
+        });
+        try {
+          audio.pause();
+        } catch (err) {
+          /* ignore */
+        }
+        URL.revokeObjectURL(url);
+        st.current = null;
+        setSpeaking(null);
+      } catch (err) {
+        pushToast(err.message, 'error');
+        st.current = null;
+        setSpeaking(null);
+      }
+    }
+    st.busy = false;
+  }, [pushToast]);
+
+  const speak = useCallback((message) => {
+    const current = sessionRef.current;
+    if (!current || !message || !message.text || !message.id) return;
+    const st = speechRef.current;
+    if (st.current && st.current.id === message.id) {
+      stopSpeech();
+      return;
+    }
+    if (st.queue.some((i) => i.id === message.id)) return;
+    st.queue.push({ id: message.id, sessionId: current.id, text: message.text, speaker: message.speaker || '' });
+    runSpeechQueue();
+  }, [runSpeechQueue, stopSpeech]);
+
+  useEffect(() => {
+    speakRef.current = speak;
+  }, [speak]);
+
   const saveConfig = useCallback(async (body) => {
     try {
       setConfig(await api.saveConfig(body));
@@ -234,7 +328,7 @@ export function App() {
         title: data.title,
         model: data.model,
         persona: { name: data.personaName, description: data.personaDesc },
-        characters: chars.map((c) => ({ name: c.name, description: c.description, personality: c.personality })),
+        characters: chars.map((c) => ({ name: c.name, description: c.description, personality: c.personality, voice: c.voice })),
         greeting: data.greeting,
         settings: { choicesEnabled: data.choicesEnabled, reasoningEffort: data.reasoningEffort },
       });
@@ -250,7 +344,7 @@ export function App() {
           avatar = up.name;
           changed = true;
         }
-        characters.push({ id: c.id, name: c.name, description: c.description, personality: c.personality, avatar });
+        characters.push({ id: c.id, name: c.name, description: c.description, personality: c.personality, avatar, voice: src.voice || '' });
       }
       let storyAvatar = '';
       if (data.avatarFile) {
@@ -293,7 +387,7 @@ export function App() {
           const up = await uploadAsset(current.id, c.avatarFile);
           avatar = up.name;
         }
-        characters.push({ id: c.id, name, description: c.description, personality: c.personality, avatar });
+        characters.push({ id: c.id, name, description: c.description, personality: c.personality, avatar, voice: c.voice || '' });
       }
       let avatar = data.avatar || '';
       if (data.avatarFile) {
@@ -409,7 +503,8 @@ export function App() {
           onMenu=${() => setSidebarOpen((v) => !v)}
           onPanel=${() => setPanelOpen((v) => !v)}
         />
-        <${C.MessageList} session=${session} streaming=${streaming} onNewStory=${() => setModal('new')} />
+        <${C.MessageList} session=${session} streaming=${streaming} onNewStory=${() => setModal('new')}
+                              onSpeak=${speak} speakingId=${speaking} />
         <${C.StatusBar} status=${status && status.status} step=${status && status.step} />
         <${C.Choices} choices=${choices} onChoose=${ (text) => send(text, []) } />
         <${C.Composer}

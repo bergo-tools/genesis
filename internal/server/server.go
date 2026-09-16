@@ -81,6 +81,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/sessions/{id}/regenerate", s.handleRegenerate)
 	mux.HandleFunc("POST /api/sessions/{id}/assets", s.handleAssetUpload)
 	mux.HandleFunc("GET /api/sessions/{id}/assets/{name}", s.handleAssetGet)
+	mux.HandleFunc("POST /api/sessions/{id}/speech", s.handleSpeech)
 	mux.Handle("GET /", s.assets)
 	return s.withLogging(mux)
 }

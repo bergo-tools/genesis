@@ -239,6 +239,28 @@ func (s *Store) AssetPath(id, name string) (string, error) {
 	return filepath.Join(s.assetsDir(id), name), nil
 }
 
+// WriteAsset stores bytes under an explicit, validated name. It is used for
+// generated media such as text-to-speech audio.
+func (s *Store) WriteAsset(id, name string, data []byte) error {
+	if !validID(id) || !validAssetName(name) {
+		return ErrNotFound
+	}
+	dir := s.assetsDir(id)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, name), data, 0o644)
+}
+
+// AssetExists reports whether an asset file is present.
+func (s *Store) AssetExists(id, name string) bool {
+	if !validID(id) || !validAssetName(name) {
+		return false
+	}
+	_, err := os.Stat(filepath.Join(s.assetsDir(id), name))
+	return err == nil
+}
+
 // OpenAsset opens an asset for reading.
 func (s *Store) OpenAsset(id, name string) (io.ReadCloser, error) {
 	p, err := s.AssetPath(id, name)

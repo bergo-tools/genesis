@@ -40,7 +40,7 @@ function messageImages(message, session) {
   return message.localImages || [];
 }
 
-export function Message({ message, session }) {
+export function Message({ message, session, onSpeak, speaking }) {
   const cls = ['msg', message.role, message.kind, message.pending ? 'pending' : ''].filter(Boolean).join(' ');
   const speaker = message.speaker || (message.role === 'user'
     ? ((session && session.persona && session.persona.name) || 'You')
@@ -60,12 +60,18 @@ export function Message({ message, session }) {
           <div class="attachments">
             ${images.map((src, i) => html`<img class="attachment" key=${i} src=${src} alt="attachment" loading="lazy" />`)}
           </div>`}
-        ${message.text ? html`<div class="text" dangerouslySetInnerHTML=${{ __html: formatText(message.text) }}></div>` : null}
+        ${message.text ? html`
+          <div class="text" dangerouslySetInnerHTML=${{ __html: formatText(message.text) }}></div>
+          <div class="msg-actions">
+            <button class=${'speak-btn' + (speaking ? ' active' : '')} type="button"
+                    title=${speaking ? 'Stop' : 'Read aloud'}
+                    onClick=${() => onSpeak && onSpeak(message)}>${speaking ? '⏹' : '🔊'}</button>
+          </div>` : null}
       </div>
     </div>`;
 }
 
-export function MessageList({ session, streaming, onNewStory }) {
+export function MessageList({ session, streaming, onNewStory, onSpeak, speakingId }) {
   const ref = useRef(null);
   const messages = (session && session.messages) || [];
   useEffect(() => {
@@ -88,7 +94,7 @@ export function MessageList({ session, streaming, onNewStory }) {
   }
   return html`
     <section class="messages" ref=${ref}>
-      ${messages.map((m) => html`<${Message} key=${m.id} message=${m} session=${session} />`)}
+      ${messages.map((m) => html`<${Message} key=${m.id} message=${m} session=${session} onSpeak=${onSpeak} speaking=${speakingId === m.id} />`)}
     </section>`;
 }
 
@@ -299,6 +305,8 @@ export function CharacterEditor({ character, index, sessionId, onChange, onRemov
           <label class="field"><span>Personality</span>
             <input type="text" value=${character.personality} placeholder="Dry, patient, secretly sentimental."
                    onInput=${set('personality')} /></label>
+          <label class="field"><span>Voice (TTS)</span>
+            <input type="text" value=${character.voice} placeholder="alloy" onInput=${set('voice')} /></label>
         </div>
       </div>
     </div>`;
@@ -326,6 +334,11 @@ export function SettingsModal({ config, onClose, onSave, onLoadModels }) {
     systemPrompt: cfg.systemPrompt || '',
     reasoningEffort: cfg.reasoningEffort || 'off',
     choicesEnabled: cfg.choicesEnabled !== false,
+    speechModel: cfg.speechModel || '',
+    speechVoice: cfg.speechVoice || '',
+    speechFormat: cfg.speechFormat || 'mp3',
+    speechSpeed: cfg.speechSpeed != null ? cfg.speechSpeed : 1,
+    autoSpeak: cfg.autoSpeak === true,
   });
   const [models, setModels] = useState([]);
   const [busy, setBusy] = useState(false);
@@ -349,6 +362,11 @@ export function SettingsModal({ config, onClose, onSave, onLoadModels }) {
       systemPrompt: form.systemPrompt,
       reasoningEffort: form.reasoningEffort,
       choicesEnabled: form.choicesEnabled,
+      speechModel: form.speechModel.trim(),
+      speechVoice: form.speechVoice.trim(),
+      speechFormat: form.speechFormat,
+      speechSpeed: Number(form.speechSpeed),
+      autoSpeak: form.autoSpeak,
     };
     if (form.apiKey.trim()) body.apiKey = form.apiKey.trim();
     onSave(body);
@@ -386,6 +404,32 @@ export function SettingsModal({ config, onClose, onSave, onLoadModels }) {
                    onChange=${ (e) => setForm((f) => ({ ...f, choicesEnabled: e.currentTarget.checked })) } />
             Require the choices tool at the end of every turn
           </label>
+          <hr />
+          <strong>Text to speech</strong>
+          <div class="grid-2">
+            <label class="field"><span>Speech model</span>
+              <input type="text" placeholder="openai/gpt-4o-mini-tts" value=${form.speechModel} onInput=${set('speechModel')} /></label>
+            <label class="field"><span>Default voice</span>
+              <input type="text" placeholder="alloy" value=${form.speechVoice} onInput=${set('speechVoice')} /></label>
+          </div>
+          <div class="row">
+            <label class="field"><span>Format</span>
+              <select value=${form.speechFormat} onChange=${set('speechFormat')}>
+                <option value="mp3">mp3</option>
+                <option value="wav">wav</option>
+                <option value="opus">opus</option>
+                <option value="aac">aac</option>
+                <option value="flac">flac</option>
+                <option value="pcm">pcm</option>
+              </select></label>
+            <label class="field"><span>Speed</span>
+              <input type="number" min="0.25" max="4" step="0.05" value=${form.speechSpeed} onInput=${set('speechSpeed')} /></label>
+          </div>
+          <label class="switch">
+            <input type="checkbox" checked=${form.autoSpeak}
+                   onChange=${ (e) => setForm((f) => ({ ...f, autoSpeak: e.currentTarget.checked })) } />
+            Read new messages aloud automatically
+          </label>
           <label class="field"><span>Tool choice</span>
             <select value=${form.toolChoice} onChange=${set('toolChoice')}>
               <option value="auto">auto</option>
@@ -404,8 +448,8 @@ export function SettingsModal({ config, onClose, onSave, onLoadModels }) {
     </div>`;
 }
 
-function newCharacter(seed) {
-  return { key: 'c' + Math.random().toString(36).slice(2), id: '', name: '', description: '', personality: '', avatar: '', avatarFile: null, avatarPreview: '' };
+function newCharacter() {
+  return { key: 'c' + Math.random().toString(36).slice(2), id: '', name: '', description: '', personality: '', avatar: '', voice: '', avatarFile: null, avatarPreview: '' };
 }
 
 export function NewStoryModal({ config, onClose, onCreate }) {
@@ -505,7 +549,8 @@ export function CastModal({ session, onClose, onSave }) {
   const [characters, setCharacters] = useState(() => ((session && session.characters) || []).map((c) => ({
     key: 'c' + Math.random().toString(36).slice(2),
     id: c.id || '', name: c.name || '', description: c.description || '',
-    personality: c.personality || '', avatar: c.avatar || '', avatarFile: null, avatarPreview: '',
+    personality: c.personality || '', avatar: c.avatar || '', voice: c.voice || '',
+    avatarFile: null, avatarPreview: '',
   })));
   const [busy, setBusy] = useState(false);
 
@@ -547,7 +592,7 @@ export function CastModal({ session, onClose, onSave }) {
               <button class="btn btn-ghost btn-sm" type="button"
                       onClick=${ () => setCharacters((cur) => cur.concat([{
                         key: 'c' + Math.random().toString(36).slice(2), id: '', name: '', description: '',
-                        personality: '', avatar: '', avatarFile: null, avatarPreview: '',
+                        personality: '', avatar: '', voice: '', avatarFile: null, avatarPreview: '',
                       }])) }>+ Add character</button>
             </div>
             ${characters.map((c, i) => html`

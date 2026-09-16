@@ -26,6 +26,11 @@ type Config struct {
 	ParallelToolCalls bool    `json:"parallelToolCalls"`
 	ReasoningEffort   string  `json:"reasoningEffort"`
 	ChoicesEnabled    bool    `json:"choicesEnabled"`
+	SpeechModel       string  `json:"speechModel"`
+	SpeechVoice       string  `json:"speechVoice"`
+	SpeechFormat      string  `json:"speechFormat"`
+	SpeechSpeed       float64 `json:"speechSpeed"`
+	AutoSpeak         bool    `json:"autoSpeak"`
 }
 
 // Default returns the built-in defaults.
@@ -42,6 +47,11 @@ func Default() Config {
 		ParallelToolCalls: true,
 		ReasoningEffort:   "off",
 		ChoicesEnabled:    true,
+		SpeechModel:       "openai/gpt-4o-mini-tts",
+		SpeechVoice:       "alloy",
+		SpeechFormat:      "mp3",
+		SpeechSpeed:       1.0,
+		AutoSpeak:         false,
 	}
 }
 
@@ -70,6 +80,12 @@ func (c *Config) normalize() {
 	}
 	if strings.TrimSpace(c.ReasoningEffort) == "" {
 		c.ReasoningEffort = d.ReasoningEffort
+	}
+	if strings.TrimSpace(c.SpeechFormat) == "" {
+		c.SpeechFormat = d.SpeechFormat
+	}
+	if c.SpeechSpeed <= 0 {
+		c.SpeechSpeed = d.SpeechSpeed
 	}
 }
 
@@ -120,6 +136,12 @@ func applyEnv(c *Config) {
 	}
 	if v := os.Getenv("GENESIS_REASONING_EFFORT"); v != "" {
 		c.ReasoningEffort = v
+	}
+	if v := os.Getenv("GENESIS_SPEECH_MODEL"); v != "" {
+		c.SpeechModel = v
+	}
+	if v := os.Getenv("GENESIS_SPEECH_VOICE"); v != "" {
+		c.SpeechVoice = v
 	}
 }
 
@@ -184,6 +206,11 @@ func (s *Store) Public() map[string]any {
 		"parallelToolCalls": c.ParallelToolCalls,
 		"reasoningEffort":   c.ReasoningEffort,
 		"choicesEnabled":    c.ChoicesEnabled,
+		"speechModel":       c.SpeechModel,
+		"speechVoice":       c.SpeechVoice,
+		"speechFormat":      c.SpeechFormat,
+		"speechSpeed":       c.SpeechSpeed,
+		"autoSpeak":         c.AutoSpeak,
 	}
 }
 
