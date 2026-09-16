@@ -37,19 +37,20 @@ type ToolEvent struct {
 
 // Event is one streamed update from the agent.
 type Event struct {
-	Type    string         `json:"type"`
-	Step    int            `json:"step,omitempty"`
-	Status  string         `json:"status,omitempty"`
-	Text    string         `json:"text,omitempty"`
-	Title   string         `json:"title,omitempty"`
-	Message *store.Message `json:"message,omitempty"`
-	State   map[string]any `json:"state,omitempty"`
-	Scene   *store.Scene   `json:"scene,omitempty"`
-	Choices []store.Choice `json:"choices,omitempty"`
-	Prompt  string         `json:"prompt,omitempty"`
-	Tool    *ToolEvent     `json:"tool,omitempty"`
-	Usage   *llm.Usage     `json:"usage,omitempty"`
-	Error   string         `json:"error,omitempty"`
+	Type    string            `json:"type"`
+	Step    int               `json:"step,omitempty"`
+	Status  string            `json:"status,omitempty"`
+	Text    string            `json:"text,omitempty"`
+	Title   string            `json:"title,omitempty"`
+	Message *store.Message    `json:"message,omitempty"`
+	State   map[string]any    `json:"state,omitempty"`
+	Scene   *store.Scene      `json:"scene,omitempty"`
+	Choices []store.Choice    `json:"choices,omitempty"`
+	Prompt  string            `json:"prompt,omitempty"`
+	Tool    *ToolEvent        `json:"tool,omitempty"`
+	Usage   *llm.Usage        `json:"usage,omitempty"`
+	Tokens  *store.TokenStats `json:"tokens,omitempty"`
+	Error   string            `json:"error,omitempty"`
 }
 
 // TurnContext is handed to every tool handler for the duration of a turn.

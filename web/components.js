@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from './vendor/hooks.module.js';
 import htm from './vendor/htm.module.js';
 import { assetURL } from './api.js';
 import { formatText, initial } from './format.js';
+import { TokenStatus, TokenPanel } from './tokens.js';
 
 const html = htm.bind(h);
 
@@ -288,12 +289,11 @@ export function Sidebar({ sessions, activeId, open, auth, onOpen, onNew, onSetti
     </aside>`;
 }
 
-export function Topbar({ session, usage, onMenu, onPanel }) {
+export function Topbar({ session, models, onMenu, onPanel }) {
   const bits = [];
   if (session && session.storyTitle) bits.push(session.storyTitle);
   if (session && session.model) bits.push(session.model);
   if (session && session.characters && session.characters.length) bits.push(session.characters.map((c) => c.name).join(', '));
-  if (usage && usage.totalTokens) bits.push(usage.totalTokens + ' tok');
   return html`
     <header class="topbar">
       <button id="menu-toggle" class="icon-btn" type="button" aria-label="Toggle stories" onClick=${onMenu}>☰</button>
@@ -304,11 +304,12 @@ export function Topbar({ session, usage, onMenu, onPanel }) {
         <span id="chat-title">${(session && session.title) || 'Genesis'}</span>
         <small id="chat-subtitle">${bits.join(' · ') || 'agentic roleplay'}</small>
       </div>
+      <${TokenStatus} session=${session} models=${models} />
       <button class="icon-btn" type="button" aria-label="Toggle world panel" onClick=${onPanel}>◧</button>
     </header>`;
 }
 
-export function Panel({ session, activity, open, onClose, onEditCast }) {
+export function Panel({ session, activity, open, models, onClose, onEditCast }) {
   const chars = (session && session.characters) || [];
   return html`
     <aside class=${'panel' + (open ? ' open' : '')} aria-label="World state">
@@ -317,6 +318,7 @@ export function Panel({ session, activity, open, onClose, onEditCast }) {
         <button class="icon-btn" type="button" aria-label="Close" onClick=${onClose}>×</button>
       </div>
       <div class="panel-body">
+        <${TokenPanel} session=${session} models=${models} />
         <section class="panel-section">
           <div class="panel-head" style="padding:0;border:none">
             <h3 style="margin:0">Cast</h3>

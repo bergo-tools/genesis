@@ -20,7 +20,6 @@ export function App({ initialAuth = null } = {}) {
   const [status, setStatus] = useState(null);
   const [activity, setActivity] = useState([]);
   const [choices, setChoices] = useState([]);
-  const [usage, setUsage] = useState(null);
   const [streaming, setStreaming] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [modal, setModal] = useState(null);
@@ -54,7 +53,6 @@ export function App({ initialAuth = null } = {}) {
     if (!session) {
       setChoices([]);
       setActivity([]);
-      setUsage(null);
       setStatus(null);
     }
   }, [session]);
@@ -108,7 +106,6 @@ export function App({ initialAuth = null } = {}) {
     setSessions([]);
     setActivity([]);
     setChoices([]);
-    setUsage(null);
     setAuth({ enabled: true, authenticated: false });
   }, []);
 
@@ -135,7 +132,6 @@ export function App({ initialAuth = null } = {}) {
       setSession(data);
       setActivity([]);
       setChoices(data.pendingChoices || []);
-      setUsage(null);
       setStatus(null);
       localStorage.setItem(LS_KEY, id);
       setSidebarOpen(false);
@@ -206,7 +202,9 @@ export function App({ initialAuth = null } = {}) {
         });
         break;
       case 'usage':
-        setUsage(event.usage);
+        // The server folds usage into the session, so the token status stays
+        // correct after a reload without another request.
+        if (event.tokens) setSession((s) => (s ? { ...s, tokens: event.tokens } : s));
         break;
       case 'notice':
         pushToast(event.text);
@@ -501,7 +499,6 @@ export function App({ initialAuth = null } = {}) {
       setSession(created);
       setActivity([]);
       setChoices([]);
-      setUsage(null);
       setStatus(null);
       localStorage.setItem(LS_KEY, created.id);
       setSidebarOpen(false);
@@ -633,7 +630,6 @@ export function App({ initialAuth = null } = {}) {
       setSession(result);
       setActivity([]);
       setChoices([]);
-      setUsage(null);
       setStatus(null);
       localStorage.setItem(LS_KEY, result.id);
       setSidebarOpen(false);
@@ -825,7 +821,7 @@ export function App({ initialAuth = null } = {}) {
       <main class="main">
         <${C.Topbar}
           session=${session}
-          usage=${usage}
+          models=${chatModels}
           onMenu=${() => setSidebarOpen((v) => !v)}
           onPanel=${() => setPanelOpen((v) => !v)}
         />
@@ -848,6 +844,7 @@ export function App({ initialAuth = null } = {}) {
         session=${session}
         activity=${activity}
         open=${panelOpen}
+        models=${chatModels}
         onClose=${() => setPanelOpen(false)}
         onEditCast=${() => setModal('story')}
       />

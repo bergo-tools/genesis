@@ -136,7 +136,9 @@ func (a *Agent) Continue(ctx context.Context, sess *store.Session, emit func(Eve
 			return errors.New("agent: empty completion")
 		}
 		if resp.Usage != nil {
-			emit(Event{Type: EventUsage, Step: step, Usage: resp.Usage})
+			sess.AddUsage(*resp.Usage)
+			stats := sess.Tokens
+			emit(Event{Type: EventUsage, Step: step, Usage: resp.Usage, Tokens: &stats})
 		}
 		if strings.TrimSpace(resp.Reasoning) != "" {
 			emit(Event{Type: EventReasoning, Step: step, Text: resp.Reasoning})

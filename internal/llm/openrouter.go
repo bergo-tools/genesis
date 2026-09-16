@@ -96,14 +96,33 @@ func (c *OpenRouterClient) Complete(ctx context.Context, req Request) (*Response
 			Arguments: tc.Function.Arguments,
 		})
 	}
-	if result.Usage != nil {
-		out.Usage = &Usage{
-			PromptTokens:     int(result.Usage.PromptTokens),
-			CompletionTokens: int(result.Usage.CompletionTokens),
-			TotalTokens:      int(result.Usage.TotalTokens),
+	out.Usage = usageFromSDK(result.Usage)
+	return out, nil
+}
+
+// usageFromSDK flattens the SDK usage object, including the cached-token and
+// cost details OpenRouter reports for prompt caching.
+func usageFromSDK(u *components.ChatUsage) *Usage {
+	if u == nil {
+		return nil
+	}
+	out := &Usage{
+		PromptTokens:     int(u.PromptTokens),
+		CompletionTokens: int(u.CompletionTokens),
+		TotalTokens:      int(u.TotalTokens),
+	}
+	if d, ok := u.PromptTokensDetails.Get(); ok && d != nil && d.CachedTokens != nil {
+		out.CachedTokens = int(*d.CachedTokens)
+	}
+	if d, ok := u.CompletionTokensDetails.Get(); ok && d != nil {
+		if r, ok := d.ReasoningTokens.Get(); ok && r != nil {
+			out.ReasoningTokens = int(*r)
 		}
 	}
-	return out, nil
+	if c, ok := u.Cost.Get(); ok && c != nil {
+		out.Cost = *c
+	}
+	return out
 }
 
 // normalizeEffort maps UI values onto OpenRouter reasoning effort values.

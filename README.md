@@ -47,6 +47,10 @@ story 的 Story settings 里逐个开关。
 - **思考强度可调**：off / minimal / low / medium / high / max（关闭思考即 off）。Settings 里设全局
   默认，**每个 story 也能在 Story settings 里单独改**（含关闭）；保存全局 Settings 时也会把模型与生成设置
   同步应用到当前打开的那个 story。
+- **Token 状态**：顶栏有一个上下文占用条（当前 prompt / 模型上下文窗口，≥70% 变黄、≥90% 变红），
+  右侧面板的 **Tokens** 区展开明细：本次上下文占用、缓存 token、累计 prompt / completion / 缓存 / 总 token、
+  调用次数，以及 OpenRouter 返回的累计费用。数据随每次 `usage` 事件实时更新，并写进 `session.json`，
+  刷新或重开也还在。
 - **语音（TTS）**：通过 OpenRouter 合成语音，可配置 speech 模型与音色，逐块朗读任意文本。
 - **模型列表自动加载**：Settings、New story、Story settings 的文字模型输入都是从 OpenRouter
   拉取的 datalist，标注上下文长度与是否支持 tools（支持工具调用的排在前面）；选中模型时会
@@ -209,6 +213,9 @@ func weatherTool() *agent.Tool {
 
 事件类型：`status`、`user_message`、`message`、`state`、`choices`、`reasoning`、
 `tool_start`、`tool_end`、`usage`、`notice`、`error`、`turn_end`、`title`。
+`usage` 事件同时带上该 session 累计后的 `tokens` 统计（`lastPromptTokens` / `lastCachedTokens` /
+`totalPromptTokens` / `totalCompletionTokens` / `totalCachedTokens` / `totalCost` / `requests`），
+前端据此更新顶栏与面板，不需要额外请求。
 
 ## 模型侧协议
 

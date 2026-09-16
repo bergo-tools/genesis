@@ -26,6 +26,8 @@ type Session struct {
 	Messages   []*Message     `json:"messages"`
 	State      map[string]any `json:"state,omitempty"`
 	Scene      Scene          `json:"scene,omitempty"`
+	// Tokens records how much of the model's context window this session uses.
+	Tokens TokenStats `json:"tokens,omitempty"`
 	// PendingChoices holds the branches offered by the last choices call so
 	// they survive a page reload. They are cleared when the player replies.
 	PendingChoices []Choice `json:"pendingChoices,omitempty"`
@@ -205,6 +207,37 @@ func equalFold(a, b string) bool {
 		}
 	}
 	return true
+}
+
+// TokenStats records the token accounting of one session. Last* describes the
+// most recent completion (the current context size); Total* accumulates over
+// the whole session.
+type TokenStats struct {
+	LastPromptTokens      int       `json:"lastPromptTokens,omitempty"`
+	LastCompletionTokens  int       `json:"lastCompletionTokens,omitempty"`
+	LastCachedTokens      int       `json:"lastCachedTokens,omitempty"`
+	TotalPromptTokens     int       `json:"totalPromptTokens,omitempty"`
+	TotalCompletionTokens int       `json:"totalCompletionTokens,omitempty"`
+	TotalCachedTokens     int       `json:"totalCachedTokens,omitempty"`
+	TotalCost             float64   `json:"totalCost,omitempty"`
+	Requests              int       `json:"requests,omitempty"`
+	UpdatedAt             time.Time `json:"updatedAt,omitempty"`
+}
+
+// AddUsage folds one completion's accounting into the session.
+func (s *Session) AddUsage(u llm.Usage) {
+	if s == nil {
+		return
+	}
+	s.Tokens.LastPromptTokens = u.PromptTokens
+	s.Tokens.LastCompletionTokens = u.CompletionTokens
+	s.Tokens.LastCachedTokens = u.CachedTokens
+	s.Tokens.TotalPromptTokens += u.PromptTokens
+	s.Tokens.TotalCompletionTokens += u.CompletionTokens
+	s.Tokens.TotalCachedTokens += u.CachedTokens
+	s.Tokens.TotalCost += u.Cost
+	s.Tokens.Requests++
+	s.Tokens.UpdatedAt = time.Now().UTC()
 }
 
 // NewID returns a short random identifier.

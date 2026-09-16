@@ -22,3 +22,11 @@ export function initial(name) {
   const value = String(name || '').trim();
   return value ? value.charAt(0).toUpperCase() : '?';
 }
+
+// formatTokens renders a token count compactly: 940, 12.3k, 1.2M.
+export function formatTokens(value) {
+  const n = Number(value) || 0;
+  if (n < 1000) return String(n);
+  if (n < 1000000) return (n / 1000).toFixed(n < 10000 ? 1 : 0) + 'k';
+  return (n / 1000000).toFixed(1) + 'M';
+}

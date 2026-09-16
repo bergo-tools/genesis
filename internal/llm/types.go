@@ -71,11 +71,15 @@ type Request struct {
 	ReasoningEffort string
 }
 
-// Usage reports token accounting.
+// Usage reports token accounting for one completion.
 type Usage struct {
 	PromptTokens     int `json:"promptTokens"`
 	CompletionTokens int `json:"completionTokens"`
 	TotalTokens      int `json:"totalTokens"`
+	// CachedTokens is the part of PromptTokens the provider served from cache.
+	CachedTokens    int     `json:"cachedTokens,omitempty"`
+	ReasoningTokens int     `json:"reasoningTokens,omitempty"`
+	Cost            float64 `json:"cost,omitempty"`
 }
 
 // Response is a single completion result.
