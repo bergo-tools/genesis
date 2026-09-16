@@ -2,8 +2,9 @@
 
 数据模型与持久化。一个记录一个目录，方便整体备份和删除。
 
-- `model.go`：`Session`（一次对话）、`Story`（可复用预设），以及 `Settings`、
-  `Character`、`Message`、`Scene`、`Choice`、`TokenStats`、`TurnSnapshot`。
+- `model.go`：`Session`（一次对话）、`Story`（可复用预设），以及 `Settings`（会话的
+  生成参数）、`StorySettings`（预设只带故事指令）、`Character`、`Message`、`Scene`、
+  `Choice`、`TokenStats`、`TurnSnapshot`。
 - `store.go`：
   - 布局：`stories/<id>/story.json + assets/`、`sessions/<id>/session.json + assets/`；
   - 原子写入（临时文件 + rename）；id 与资源名都做校验，禁止 `..` 与路径分隔符；

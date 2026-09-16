@@ -39,19 +39,19 @@ type Session struct {
 	History []llm.Message `json:"history,omitempty"`
 }
 
-// Story is a reusable preset: a cast, an opening, and default settings.
-// Sessions are started from a story and snapshot its cast and defaults.
+// Story is a reusable preset: a cast, an opening, and its story instructions.
+// A preset never carries generation options — those come from the global
+// config or, once a session exists, from that session's own settings.
 type Story struct {
 	ID          string         `json:"id"`
 	Title       string         `json:"title"`
 	Avatar      string         `json:"avatar,omitempty"`
 	Description string         `json:"description,omitempty"`
 	Genre       string         `json:"genre,omitempty"`
-	Model       string         `json:"model,omitempty"`
 	Opening     string         `json:"opening,omitempty"`
 	Persona     Persona        `json:"persona,omitempty"`
 	Characters  []*Character   `json:"characters"`
-	Settings    Settings       `json:"settings"`
+	Settings    StorySettings  `json:"settings"`
 	State       map[string]any `json:"state,omitempty"`
 	Scene       Scene          `json:"scene,omitempty"`
 	Builtin     bool           `json:"builtin,omitempty"`
@@ -59,7 +59,15 @@ type Story struct {
 	UpdatedAt   time.Time      `json:"updatedAt"`
 }
 
-// Settings holds generation options, shared by stories and sessions.
+// StorySettings is the content-level configuration a preset may carry. It
+// keeps the "settings"/"systemPrompt" shape so presets written before presets
+// stopped pinning generation options still load; their extra keys are ignored.
+type StorySettings struct {
+	SystemPrompt string `json:"systemPrompt,omitempty"`
+}
+
+// Settings holds generation options. A session snapshots the global config
+// into it when it starts, so later config edits never rewrite a live story.
 type Settings struct {
 	Temperature     float64 `json:"temperature"`
 	MaxTokens       int     `json:"maxTokens"`

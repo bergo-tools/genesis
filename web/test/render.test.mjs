@@ -20,6 +20,15 @@ function check(name, out, needles) {
   return out.length;
 }
 
+function deny(name, out, needles) {
+  const found = needles.filter((needle) => out.includes(needle));
+  if (found.length) {
+    console.error(name + ' should not contain: ' + found.join(', '));
+    process.exit(1);
+  }
+  return 0;
+}
+
 const tools = [
   { name: 'message', description: 'say things', terminal: false, query: false },
   { name: 'think', description: 'inner thought', terminal: false, query: false },
@@ -54,7 +63,7 @@ const settings = renderToString(h(SettingsModal, { config: {}, tools, chatModels
 const sessionSettings = renderToString(h(StoryModal, { session, tools, chatModels, disabledTools: [] }));
 const newSession = renderToString(h(NewSessionModal, { stories }));
 const storiesModal = renderToString(h(StoriesModal, { stories }));
-const preset = renderToString(h(PresetModal, { story: null, config: {}, tools, chatModels }));
+const preset = renderToString(h(PresetModal, { story: null }));
 const login = renderToString(h(Login, { onSuccess: () => {} }));
 const composer = renderToString(h(Composer, { streaming: false, disabled: false, uploading: false, hasChoices: false, onSend: () => {}, onStop: () => {} }));
 const tokenSession = {
@@ -78,7 +87,8 @@ const total = check('MessageList', chat, ['hello there', 'well met', '✎', '↻
   + check('StoryModal', sessionSettings, ['tool-toggles', 'picker-trigger', '<select'])
   + check('NewSessionModal', newSession, ['preset-card', 'New session', 'Emberfall', 'width:40px;height:40px', '<img', 'custom1/assets/cover.png'])
   + check('StoriesModal', storiesModal, ['preset-list', 'preset-row', 'New preset', 'Start'])
-  + check('PresetModal', preset, ['tool-toggles', 'picker-trigger', '<select'])
+  + check('PresetModal', preset, ['New preset', 'Opening message', 'Story instructions', '+ Add character'])
+  + deny('PresetModal', preset, ['picker-trigger', 'tool-toggles', '<select', 'Temperature', 'Max output tokens', 'Default model'])
   + check('Login', login, ['login-screen', 'login-card', 'Password', 'Unlock'])
   + check('Composer', composer, ['What do you do?', 'OOC', 'Send'])
   + check('TokenStatus', tokenStatus, ['token-status', 'token-bar', 'token-num', '5.0k/20k', '25% of 20k'])

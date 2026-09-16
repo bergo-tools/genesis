@@ -63,13 +63,7 @@ func emberfallStory() *Story {
 				CreatedAt:   now,
 			},
 		},
-		Settings: Settings{
-			Temperature:     1.0,
-			MaxTokens:       2048,
-			MaxSteps:        6,
-			ToolChoice:      "auto",
-			ReasoningEffort: "off",
-			ChoicesEnabled:  true,
+		Settings: StorySettings{
 			SystemPrompt: "这是一场黑暗中世纪奇幻冒险。魔法罕见、危险，且正在苏醒。" +
 				"让施法有代价、让誓言与承诺被记住、让后果真实。用 scene 记录地点与环境，" +
 				"控制节奏：每回合推进一个场景节拍，然后给玩家选择。",

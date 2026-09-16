@@ -389,11 +389,13 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 		sess.StoryTitle = st.Title
 		sess.Avatar = st.Avatar
 		sess.Scene = st.Scene
-		if strings.TrimSpace(sess.Model) == "" {
-			sess.Model = st.Model
-		}
 		sess.Persona = st.Persona
-		sess.Settings = st.Settings
+		// A preset carries content, not generation options: the session keeps
+		// the global defaults snapshotted above and inherits only the preset's
+		// story instructions.
+		if instructions := strings.TrimSpace(st.Settings.SystemPrompt); instructions != "" {
+			sess.Settings.SystemPrompt = instructions
+		}
 		sess.Characters = cloneCharacters(st.Characters)
 		sess.State = cloneState(st.State)
 		if sess.Title == "" {
@@ -413,6 +415,11 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 	}
 	if body.Avatar != "" {
 		sess.Avatar = strings.TrimSpace(body.Avatar)
+	}
+	// The model is global: a new session pins the current one instead of
+	// leaving it empty, so a later config change cannot retarget this story.
+	if strings.TrimSpace(sess.Model) == "" {
+		sess.Model = strings.TrimSpace(s.cfg.Get().Model)
 	}
 	applySettings(&sess.Settings, body.Settings)
 

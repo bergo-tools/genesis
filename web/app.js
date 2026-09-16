@@ -519,7 +519,6 @@ export function App({ initialAuth = null } = {}) {
         title: data.title,
         description: data.description,
         genre: data.genre,
-        model: data.model,
         opening: data.opening,
         persona: data.persona,
         characters: picked.map((c) => ({
@@ -584,64 +583,6 @@ export function App({ initialAuth = null } = {}) {
       return [];
     }
   }, []);
-
-  const createStory = useCallback(async (data) => {
-    cancelStream();
-    try {
-      const chars = (data.characters || []).filter((c) => (c.name || '').trim());
-      const created = await api.createSession({
-        title: data.title,
-        model: data.model,
-        persona: { name: data.personaName, description: data.personaDesc },
-        characters: chars.map((c) => ({ name: c.name, description: c.description, personality: c.personality, voice: c.voice })),
-        greeting: data.greeting,
-        settings: {
-          choicesEnabled: data.choicesEnabled,
-          reasoningEffort: data.reasoningEffort,
-          maxTokens: data.maxTokens,
-          disabledTools: data.disabledTools,
-        },
-      });
-      let changed = false;
-      const characters = [];
-      const createdChars = created.characters || [];
-      for (let i = 0; i < createdChars.length; i++) {
-        const c = createdChars[i];
-        const src = chars[i] || {};
-        let avatar = '';
-        if (src.avatarFile) {
-          const up = await uploadAsset(created.id, src.avatarFile);
-          avatar = up.name;
-          changed = true;
-        }
-        characters.push({ id: c.id, name: c.name, description: c.description, personality: c.personality, avatar, voice: src.voice || '' });
-      }
-      let storyAvatar = '';
-      if (data.avatarFile) {
-        const up = await uploadAsset(created.id, data.avatarFile);
-        storyAvatar = up.name;
-        changed = true;
-      }
-      let result = created;
-      if (changed) {
-        result = await api.patchSession(created.id, { avatar: storyAvatar, characters });
-      }
-      setModal(null);
-      setSession(result);
-      setActivity([]);
-      setChoices([]);
-      setStatus(null);
-      localStorage.setItem(LS_KEY, result.id);
-      setSidebarOpen(false);
-      setPanelOpen(false);
-      await refreshSessions();
-      if (!result.messages || !result.messages.length) {
-        await runStream('/api/sessions/' + result.id + '/opening', {});
-      }
-    } catch (err) {
-      pushToast(err.message, 'error');
-    }
-  }, [cancelStream, pushToast, refreshSessions, runStream]);
 
   const saveStory = useCallback(async (data) => {
     const current = sessionRef.current;
@@ -859,8 +800,7 @@ export function App({ initialAuth = null } = {}) {
                          onStart=${async (id) => { await loadStories(); await startSession({ storyId: id }); }}
                          onEdit=${openPreset} onNew=${() => openPreset(null)} onDelete=${deletePreset} />`}
       ${modal === 'preset' && html`
-        <${PresetModal} story=${editingStory} config=${config} chatModels=${chatModels}
-                        tools=${allTools} onClose=${() => setModal(null)} onSave=${savePreset} />`}
+        <${PresetModal} story=${editingStory} onClose=${() => setModal(null)} onSave=${savePreset} />`}
       ${modal === 'story' && session && html`
         <${StoryModal} session=${session} onClose=${() => setModal(null)} onSave=${saveStory}
                        chatModels=${chatModels} speechModel=${config && config.speechModel}

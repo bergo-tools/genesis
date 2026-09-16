@@ -15,13 +15,19 @@ type storyInput struct {
 	Avatar      *string          `json:"avatar"`
 	Description *string          `json:"description"`
 	Genre       *string          `json:"genre"`
-	Model       *string          `json:"model"`
 	Opening     *string          `json:"opening"`
 	Persona     *store.Persona   `json:"persona"`
 	Characters  []characterInput `json:"characters"`
-	Settings    *settingsInput   `json:"settings"`
+	Settings    *storySettings   `json:"settings"`
 	State       map[string]any   `json:"state"`
 	Scene       *store.Scene     `json:"scene"`
+}
+
+// storySettings is the only part of a preset's settings the API still accepts.
+// Generation options (model, temperature, token budgets, tool switches) are
+// global or per-session, so a preset must not pin them.
+type storySettings struct {
+	SystemPrompt *string `json:"systemPrompt"`
 }
 
 func applyStoryInput(st *store.Story, in *storyInput) {
@@ -39,9 +45,6 @@ func applyStoryInput(st *store.Story, in *storyInput) {
 	}
 	if in.Genre != nil {
 		st.Genre = strings.TrimSpace(*in.Genre)
-	}
-	if in.Model != nil {
-		st.Model = strings.TrimSpace(*in.Model)
 	}
 	if in.Opening != nil {
 		st.Opening = strings.TrimSpace(*in.Opening)
@@ -64,7 +67,9 @@ func applyStoryInput(st *store.Story, in *storyInput) {
 	if in.Scene != nil {
 		st.Scene = *in.Scene
 	}
-	applySettings(&st.Settings, in.Settings)
+	if in.Settings != nil && in.Settings.SystemPrompt != nil {
+		st.Settings.SystemPrompt = strings.TrimSpace(*in.Settings.SystemPrompt)
+	}
 }
 
 func (s *Server) handleListStories(w http.ResponseWriter, _ *http.Request) {
@@ -105,7 +110,7 @@ func (s *Server) handleCreateStory(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	st := &store.Story{Settings: defaultSettings(s.cfg.Get()), State: map[string]any{}}
+	st := &store.Story{State: map[string]any{}}
 	applyStoryInput(st, &body)
 	if st.Title == "" {
 		writeError(w, http.StatusBadRequest, errors.New("title is required"))
