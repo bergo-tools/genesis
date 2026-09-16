@@ -46,6 +46,17 @@ export function App({ initialAuth = null } = {}) {
     sessionRef.current = session;
   }, [session]);
 
+  // Choices, tool activity and usage belong to one session. When the active
+  // session goes away (e.g. the last one was deleted) they must not linger.
+  useEffect(() => {
+    if (!session) {
+      setChoices([]);
+      setActivity([]);
+      setUsage(null);
+      setStatus(null);
+    }
+  }, [session]);
+
   useEffect(() => {
     configRef.current = config;
   }, [config]);
@@ -758,7 +769,7 @@ export function App({ initialAuth = null } = {}) {
                               onSpeak=${speak} speakingId=${speaking}
                               onReroll=${rerollFrom} onEdit=${editUserMessage} busy=${streaming} />
         <${C.StatusBar} status=${status && status.status} step=${status && status.step} />
-        <${C.Choices} choices=${choices} onChoose=${ (text) => send(text, []) } />
+        <${C.Choices} choices=${session ? choices : []} onChoose=${ (text) => send(text, []) } />
         <${C.Composer}
           streaming=${streaming}
           uploading=${uploading}
