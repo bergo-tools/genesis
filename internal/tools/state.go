@@ -4,90 +4,148 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sort"
 	"strings"
 
 	"github.com/zp/genesis/internal/agent"
+	"github.com/zp/genesis/internal/store"
 )
 
 func updateStateTool() *agent.Tool {
 	return &agent.Tool{
 		Name:     "update_state",
 		Category: "state",
-		Description: "Record durable information the player wants remembered: inventory, stats, flags, " +
-			"relationships, promises, preferences, scene facts. path is a dot path such as " +
-			"inventory.gold or cast.ilyra.trust. op is set, add, append, delete or toggle. This is " +
-			"the only way to persist state, so use it whenever something should not be forgotten.",
+		Description: "Track durable facts about the story as key/value pairs: inventory, stats, flags, " +
+			"promises, relationship values, clues, places. Pass every change from this turn in one call. " +
+			"The tracked changes are shown to the player alongside your response and persist for the " +
+			"whole session.",
 		Parameters: object(map[string]any{
-			"path": stringProp("Dot path into the story state, for example inventory.gold."),
-			"op":   enumProp("Operation to perform.", "set", "add", "append", "delete", "toggle"),
-			"value": map[string]any{
-				"description": "Value for set/add/append. Ignored for delete and toggle.",
+			"changes": arrayProp("Key/value changes to apply.", object(map[string]any{
+				"key":   stringProp("Dot path, e.g. inventory.gold or cast.serelith.trust."),
+				"value": map[string]any{"description": "The new value."},
+				"op":    enumProp("Operation, defaults to set.", "set", "add", "append", "delete", "toggle"),
+			}, "key")),
+			"values": map[string]any{
+				"type":                 "object",
+				"description":          "Shorthand map of dot path to value (all set).",
+				"additionalProperties": true,
 			},
 			"last_call": lastCallProp(),
-		}, "path", "op"),
+		}),
 		Handler: func(_ context.Context, tc *agent.TurnContext, args json.RawMessage) (any, error) {
 			var a struct {
-				Path  string `json:"path"`
-				Op    string `json:"op"`
-				Value any    `json:"value"`
+				Changes []struct {
+					Key   string `json:"key"`
+					Value any    `json:"value"`
+					Op    string `json:"op"`
+				} `json:"changes"`
+				Values map[string]any `json:"values"`
 			}
 			if err := decode(args, &a); err != nil {
 				return nil, err
 			}
-			path := strings.TrimSpace(a.Path)
-			if path == "" {
-				return nil, errors.New("path is required")
-			}
 			if tc.Session.State == nil {
 				tc.Session.State = map[string]any{}
 			}
-			op := strings.ToLower(strings.TrimSpace(a.Op))
-			if op == "" {
-				op = "set"
+			tracked := map[string]any{}
+			apply := func(key, op string, value any) error {
+				key = strings.TrimSpace(key)
+				if key == "" {
+					return errors.New("key is required")
+				}
+				switch strings.ToLower(strings.TrimSpace(op)) {
+				case "", "set":
+					if err := setPath(tc.Session.State, key, value); err != nil {
+						return err
+					}
+				case "add":
+					cur, _ := getPath(tc.Session.State, key)
+					base, _ := toFloat(cur)
+					delta, ok := toFloat(value)
+					if !ok {
+						return errors.New("value must be numeric for add")
+					}
+					if err := setPath(tc.Session.State, key, numToAny(base+delta)); err != nil {
+						return err
+					}
+				case "append":
+					cur, _ := getPath(tc.Session.State, key)
+					list, _ := cur.([]any)
+					list = append(list, value)
+					if err := setPath(tc.Session.State, key, list); err != nil {
+						return err
+					}
+				case "delete":
+					deletePath(tc.Session.State, key)
+				case "toggle":
+					cur, _ := getPath(tc.Session.State, key)
+					next := true
+					if b, ok := cur.(bool); ok {
+						next = !b
+					}
+					if err := setPath(tc.Session.State, key, next); err != nil {
+						return err
+					}
+				default:
+					return errors.New("unknown op: " + op)
+				}
+				v, _ := getPath(tc.Session.State, key)
+				tracked[key] = v
+				return nil
 			}
-			switch op {
-			case "set":
-				if err := setPath(tc.Session.State, path, a.Value); err != nil {
+			for _, ch := range a.Changes {
+				if err := apply(ch.Key, ch.Op, ch.Value); err != nil {
 					return nil, err
 				}
-			case "add":
-				cur, _ := getPath(tc.Session.State, path)
-				base, _ := toFloat(cur)
-				delta, ok := toFloat(a.Value)
-				if !ok {
-					return nil, errors.New("value must be numeric for add")
-				}
-				if err := setPath(tc.Session.State, path, numToAny(base+delta)); err != nil {
+			}
+			for k, v := range a.Values {
+				if err := apply(k, "set", v); err != nil {
 					return nil, err
 				}
-			case "append":
-				cur, _ := getPath(tc.Session.State, path)
-				list, _ := cur.([]any)
-				list = append(list, a.Value)
-				if err := setPath(tc.Session.State, path, list); err != nil {
-					return nil, err
-				}
-			case "delete":
-				deletePath(tc.Session.State, path)
-			case "toggle":
-				cur, _ := getPath(tc.Session.State, path)
-				next := true
-				if b, ok := cur.(bool); ok {
-					next = !b
-				}
-				if err := setPath(tc.Session.State, path, next); err != nil {
-					return nil, err
-				}
-			default:
-				return nil, errors.New("unknown op: " + op)
+			}
+			if len(tracked) == 0 {
+				return nil, errors.New("no changes provided")
 			}
 			if tc.Emit != nil {
-				tc.Emit(agent.Event{Type: agent.EventState, Step: tc.Step, State: tc.Session.State})
+				tc.Emit(agent.Event{
+					Type:    agent.EventState,
+					Step:    tc.Step,
+					State:   tc.Session.State,
+					Tracker: tracked,
+				})
 			}
-			v, _ := getPath(tc.Session.State, path)
-			return map[string]any{"ok": true, "path": path, "value": v}, nil
+			// A compact, persistent record so the player sees what was tracked.
+			tc.Show(&store.Message{
+				Role:    "assistant",
+				Kind:    store.KindState,
+				Speaker: "Tracker",
+				Text:    renderTracking(tracked),
+				Args:    jsonBytes(tracked),
+			})
+			return map[string]any{"ok": true, "tracked": tracked}, nil
 		},
 	}
+}
+
+func renderTracking(tracked map[string]any) string {
+	keys := make([]string, 0, len(tracked))
+	for k := range tracked {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	lines := make([]string, 0, len(keys))
+	for _, k := range keys {
+		lines = append(lines, k+" = "+string(jsonBytes(tracked[k])))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func jsonBytes(v any) json.RawMessage {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return nil
+	}
+	return b
 }
 
 func getPath(state map[string]any, path string) (any, bool) {

@@ -59,6 +59,8 @@ func choicesTool() *agent.Tool {
 				})
 			}
 			tc.ChoicesOffered = true
+			tc.Session.PendingChoices = cleaned
+			tc.Session.PendingPrompt = narration
 			if tc.Emit != nil {
 				tc.Emit(agent.Event{
 					Type:    agent.EventChoices,

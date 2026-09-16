@@ -74,6 +74,12 @@ func emberfallStory() *Story {
 				"让施法有代价、让誓言与承诺被记住、让后果真实。用 update_state 记录玩家" +
 				"获得的信息、物品与承诺。控制节奏：每回合推进一个场景节拍，然后给玩家选择。",
 		},
+		Scene: Scene{
+			Location:   "雾中的官道，距灰烬堡三日路程",
+			Time:       "黄昏",
+			Weather:    "低垂的灰雾，空气里有铁锈味",
+			Background: "路旁界石上的守焰纹章正一寸寸剥落。",
+		},
 		State: map[string]any{
 			"kingdom": "灰烬堡",
 			"ward":    "正在熄灭",

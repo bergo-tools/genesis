@@ -363,6 +363,7 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 		sess.StoryID = st.ID
 		sess.StoryTitle = st.Title
 		sess.Avatar = st.Avatar
+		sess.Scene = st.Scene
 		if strings.TrimSpace(sess.Model) == "" {
 			sess.Model = st.Model
 		}
@@ -515,6 +516,9 @@ func (s *Server) handleMessage(w http.ResponseWriter, r *http.Request) {
 	}
 	sess.Messages = append(sess.Messages, user)
 	sess.History = append(sess.History, llm.Message{Role: llm.RoleUser, Content: text, Images: assetImages(images)})
+	// The player answered, so the previous branch offer is spent.
+	sess.PendingChoices = nil
+	sess.PendingPrompt = ""
 
 	title := ""
 	if strings.TrimSpace(sess.Title) == "" {

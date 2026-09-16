@@ -11,10 +11,10 @@ OpenRouter 的 chat 接口由官方 SDK [`github.com/OpenRouterTeam/go-sdk`](htt
 
 | 工具 | 作用 | 是否结束回合 |
 | --- | --- | --- |
-| `message` | 角色发声/行动，或旁白场景（kind 为 speech / action / narration） | 否 |
-| `think` | 角色**内心想法**，以暗淡气泡展示 | 否 |
-| `update_state` | 记录玩家要求记住的信息（物品、数值、旗标、关系、场景事实） | 否 |
-| `choices` | 输出场景描述 + 2–4 个后续选项，把控制权交还玩家 | **是（terminal）** |
+| `message` | 一个场景节拍：`text`（对白/动作/旁白）+ 可选 `thought`（角色内心想法，同块显示、颜色区分） | 否 |
+| `update_state` | 批量 tracking：一次传入多组 key-value（`changes` 数组或 `values` 映射），变更随本轮回复显示并持久保存 | 否 |
+| `scene` | 场景描写：location / time / weather / background / notes，只更新传入字段 | 否 |
+| `choices` | 输出场景描述 + 2–4 个后续选项，把控制权交还玩家；选项会持久保存，刷新后仍在 | **是（terminal）** |
 
 每个工具都带一个可选参数 `last_call`：模型在自己认为是本轮最后一次调用时置为 `true`。
 当 choices 未启用时，`last_call` 会结束本轮；当 choices 启用时，它被忽略，模型仍必须调用
@@ -28,6 +28,10 @@ story 的 Story settings 里逐个开关。
 ## 特性
 
 - **一切皆工具调用**，只有 4 个工具：message / think / update_state / choices。
+- **一段式消息**：`message` 的 text 与 thought 合并在同一个气泡里，内心想法用不同颜色与斜体区分。
+- **状态 tracking**：`update_state` 一次传入多组 key-value，改动会以紧凑的 tracker 块跟随本轮回复出现。
+- **场景栏**：`scene` 维护地点/时间/天气/背景，顶部场景栏实时更新。
+- **会话管理**：侧栏每个 session 都有删除按钮；`choices` 持久化在会话上，刷新页面不丢。
 - **Story 预设 + Session 会话**：Story 是可复用的预设（cast、开场、默认设置、种子状态），
   每个 session 从预设开启并拥有独立对话；内置中世纪魔法预设「灰烬王冠 · Emberfall」。
 - **多角色 cast**：一个 story 可配置任意多个角色，每个角色有名字、设定、性格、头像与 TTS 音色；

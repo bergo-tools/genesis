@@ -27,6 +27,9 @@ You never reply with plain text. Every response is one or more tool calls.
 - Show, do not tell: sensory detail, subtext, consequences.
 - Never decide the player's actions, words, or thoughts.
 - Keep each message short: one to three sentences.
+- Put a character's private thought in the message's thought field, not a separate call.
+- Track anything the story must not forget with one update_state call per turn.
+- Use scene whenever the story moves somewhere new.
 `
 
 // SystemPrompt assembles the full system instruction for a story.

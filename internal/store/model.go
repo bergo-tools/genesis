@@ -26,6 +26,11 @@ type Session struct {
 	Characters []*Character   `json:"characters"`
 	Messages   []*Message     `json:"messages"`
 	State      map[string]any `json:"state,omitempty"`
+	Scene      Scene          `json:"scene,omitempty"`
+	// PendingChoices holds the branches offered by the last choices call so
+	// they survive a page reload. They are cleared when the player replies.
+	PendingChoices []Choice `json:"pendingChoices,omitempty"`
+	PendingPrompt  string   `json:"pendingPrompt,omitempty"`
 
 	// History is the model-facing transcript. The system prompt is rebuilt on
 	// every turn and is therefore not stored here. Image entries keep only the
@@ -47,6 +52,7 @@ type Story struct {
 	Characters  []*Character   `json:"characters"`
 	Settings    Settings       `json:"settings"`
 	State       map[string]any `json:"state,omitempty"`
+	Scene       Scene          `json:"scene,omitempty"`
 	Builtin     bool           `json:"builtin,omitempty"`
 	CreatedAt   time.Time      `json:"createdAt"`
 	UpdatedAt   time.Time      `json:"updatedAt"`
@@ -83,6 +89,15 @@ type Character struct {
 	CreatedAt   time.Time `json:"createdAt"`
 }
 
+// Scene describes where the story currently is.
+type Scene struct {
+	Location   string `json:"location,omitempty"`
+	Time       string `json:"time,omitempty"`
+	Weather    string `json:"weather,omitempty"`
+	Background string `json:"background,omitempty"`
+	Notes      string `json:"notes,omitempty"`
+}
+
 // Message kinds rendered by the UI.
 const (
 	KindUser      = "user"
@@ -92,6 +107,7 @@ const (
 	KindThought   = "thought"
 	KindPrompt    = "prompt"
 	KindState     = "state"
+	KindScene     = "scene"
 	KindSystem    = "system"
 )
 
@@ -102,6 +118,7 @@ type Message struct {
 	Kind      string          `json:"kind"`
 	Speaker   string          `json:"speaker,omitempty"`
 	Text      string          `json:"text,omitempty"`
+	Thought   string          `json:"thought,omitempty"`
 	Mood      string          `json:"mood,omitempty"`
 	Images    []string        `json:"images,omitempty"`
 	Args      json.RawMessage `json:"args,omitempty"`

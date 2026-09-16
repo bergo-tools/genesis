@@ -65,7 +65,7 @@ export function App() {
       const data = await api.session(id);
       setSession(data);
       setActivity([]);
-      setChoices([]);
+      setChoices(data.pendingChoices || []);
       setUsage(null);
       setStatus(null);
       localStorage.setItem(LS_KEY, id);
@@ -103,6 +103,9 @@ export function App() {
         break;
       case 'state':
         setSession((s) => (s ? { ...s, state: event.state } : s));
+        break;
+      case 'scene':
+        setSession((s) => (s ? { ...s, scene: event.scene } : s));
         break;
       case 'choices':
         setChoices(event.choices || []);
@@ -561,6 +564,24 @@ export function App() {
     }
   }, []);
 
+  const deleteSession = useCallback(async (target) => {
+    if (!target) return;
+    if (!window.confirm('Delete session "' + (target.title || '') + '"? This cannot be undone.')) return;
+    try {
+      await api.deleteSession(target.id);
+      const list = (await api.sessions()).sessions || [];
+      setSessions(list);
+      const wasActive = sessionRef.current && sessionRef.current.id === target.id;
+      if (wasActive) {
+        setSession(null);
+        localStorage.removeItem(LS_KEY);
+        if (list[0]) await openSession(list[0].id);
+      }
+    } catch (err) {
+      pushToast(err.message, 'error');
+    }
+  }, [openSession, pushToast]);
+
   const deleteCurrent = useCallback(async () => {
     const current = sessionRef.current;
     if (!current) return;
@@ -642,6 +663,7 @@ export function App() {
         onStories=${() => setModal('stories')}
         onSettings=${openSettings}
         onTools=${openTools}
+        onDelete=${deleteSession}
       />
       ${(sidebarOpen || panelOpen) && html`<div class="scrim" onClick=${closeDrawers}></div>`}
       <main class="main">
@@ -651,6 +673,7 @@ export function App() {
           onMenu=${() => setSidebarOpen((v) => !v)}
           onPanel=${() => setPanelOpen((v) => !v)}
         />
+        <${C.SceneBar} scene=${session && session.scene} />
         <${C.MessageList} session=${session} streaming=${streaming} onNewStory=${() => setModal('new-session')}
                               onSpeak=${speak} speakingId=${speaking} />
         <${C.StatusBar} status=${status && status.status} step=${status && status.step} />

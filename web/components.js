@@ -68,7 +68,10 @@ export function Message({ message, session, onSpeak, speaking }) {
             ${images.map((src, i) => html`<img class="attachment" key=${i} src=${src} alt="attachment" loading="lazy" />`)}
           </div>`}
         ${message.text ? html`
-          <div class="text" dangerouslySetInnerHTML=${{ __html: formatText(message.text) }}></div>
+          <div class="text" dangerouslySetInnerHTML=${{ __html: formatText(message.text) }}></div>` : null}
+        ${message.thought ? html`
+          <div class="thought-inline" dangerouslySetInnerHTML=${{ __html: formatText(message.thought) }}></div>` : null}
+        ${(message.text || message.thought) ? html`
           <div class="msg-actions">
             <button class=${'speak-btn' + (speaking ? ' active' : '')} type="button"
                     title=${speaking ? 'Stop' : 'Read aloud'}
@@ -102,6 +105,18 @@ export function MessageList({ session, streaming, onNewStory, onSpeak, speakingI
   return html`
     <section class="messages" ref=${ref}>
       ${messages.map((m) => html`<${Message} key=${m.id} message=${m} session=${session} onSpeak=${onSpeak} speaking=${speakingId === m.id} />`)}
+    </section>`;
+}
+
+export function SceneBar({ scene }) {
+  const s = scene || {};
+  const fields = [['📍', s.location], ['🕓', s.time], ['☁', s.weather]]
+    .filter(([, v]) => v && String(v).trim());
+  if (!fields.length && !(s.notes || '').trim()) return null;
+  return html`
+    <section class="scene-bar">
+      ${fields.map(([icon, value]) => html`<span key=${icon}>${icon} <b>${value}</b></span>`)}
+      ${s.notes && html`<span class="muted">${s.notes}</span>`}
     </section>`;
 }
 
@@ -190,7 +205,7 @@ export function Composer({ streaming, disabled, uploading, hasChoices, canReroll
     </footer>`;
 }
 
-export function Sidebar({ sessions, activeId, open, onOpen, onNew, onSettings, onTools, onStories }) {
+export function Sidebar({ sessions, activeId, open, onOpen, onNew, onSettings, onTools, onStories, onDelete }) {
   return html`
     <aside class=${'sidebar' + (open ? ' open' : '')} aria-label="Stories">
       <div class="sidebar-head">
@@ -200,12 +215,14 @@ export function Sidebar({ sessions, activeId, open, onOpen, onNew, onSettings, o
       <nav class="session-list">
         ${!sessions.length && html`<p class="muted" style="padding:10px">No stories yet.</p>`}
         ${sessions.map((s) => html`
-          <button key=${s.id} type="button"
-                  class=${'session-item' + (s.id === activeId ? ' active' : '')}
-                  onClick=${() => onOpen(s.id)}>
-            <span class="t">${s.title || 'Untitled'}</span>
-            <span class="s">${((s.characters || []).join(', ') || '') + (s.messageCount ? ' · ' + s.messageCount + ' msg' : '')}</span>
-          </button>`)}
+          <div key=${s.id} class=${'session-item' + (s.id === activeId ? ' active' : '')}>
+            <button type="button" class="session-open" onClick=${() => onOpen(s.id)}>
+              <span class="t">${s.title || 'Untitled'}</span>
+              <span class="s">${((s.characters || []).join(', ') || '') + (s.messageCount ? ' · ' + s.messageCount + ' msg' : '')}</span>
+            </button>
+            <button type="button" class="session-del" title="Delete session"
+                    onClick=${(e) => { e.stopPropagation(); onDelete && onDelete(s); }}>✕</button>
+          </div>`)}
       </nav>
       <div class="sidebar-foot">
         <button class="btn btn-ghost btn-sm" type="button" onClick=${onStories}>Stories</button>
