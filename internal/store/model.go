@@ -113,12 +113,15 @@ const (
 
 // Message is one displayable event in the chat.
 type Message struct {
-	ID        string          `json:"id"`
-	Role      string          `json:"role"`
-	Kind      string          `json:"kind"`
-	Speaker   string          `json:"speaker,omitempty"`
-	Text      string          `json:"text,omitempty"`
-	Thought   string          `json:"thought,omitempty"`
+	ID      string `json:"id"`
+	Role    string `json:"role"`
+	Kind    string `json:"kind"`
+	Speaker string `json:"speaker,omitempty"`
+	Text    string `json:"text,omitempty"`
+	Thought string `json:"thought,omitempty"`
+	// OOC is an out-of-character instruction the player sent with this
+	// message. It is shown separately and passed to the model as [OOC] text.
+	OOC       string          `json:"ooc,omitempty"`
 	Mood      string          `json:"mood,omitempty"`
 	Images    []string        `json:"images,omitempty"`
 	Args      json.RawMessage `json:"args,omitempty"`

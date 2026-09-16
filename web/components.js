@@ -81,6 +81,9 @@ export function Message({ message, session, onSpeak, speaking, action, onReroll,
           <div class="attachments">
             ${images.map((src, i) => html`<img class="attachment" key=${i} src=${src} alt="attachment" loading="lazy" />`)}
           </div>`}
+        ${message.ooc ? html`
+          <div class="ooc-inline"><span class="ooc-tag">OOC</span>
+            <span dangerouslySetInnerHTML=${{ __html: formatText(message.ooc) }}></span></div>` : null}
         ${editing ? html`
           <textarea class="edit-box" rows="3" value=${draft}
                     onInput=${(e) => setDraft(e.currentTarget.value)}></textarea>
@@ -187,6 +190,8 @@ export function Composer({ streaming, disabled, uploading, hasChoices, onSend, o
   const ref = useRef(null);
   const fileRef = useRef(null);
   const [value, setValue] = useState('');
+  const [ooc, setOoc] = useState('');
+  const [showOoc, setShowOoc] = useState(false);
   const [files, setFiles] = useState([]);
 
   useEffect(() => {
@@ -199,11 +204,14 @@ export function Composer({ streaming, disabled, uploading, hasChoices, onSend, o
   const busy = streaming || uploading;
   const submit = () => {
     const text = value.trim();
-    if (busy || (!text && !files.length)) return;
+    const directive = ooc.trim();
+    if (busy || (!text && !files.length && !directive)) return;
     const payload = files.map((f) => f.file);
     setValue('');
+    setOoc('');
+    if (!directive) setShowOoc(false);
     setFiles([]);
-    onSend(text, payload);
+    onSend(text, payload, directive);
   };
   const addFiles = (e) => {
     const picked = Array.from(e.currentTarget.files || []);
@@ -224,6 +232,10 @@ export function Composer({ streaming, disabled, uploading, hasChoices, onSend, o
               <button type="button" title="Remove" onClick=${() => removeFile(i)}>×</button>
             </div>`)}
         </div>`}
+      ${showOoc && html`
+        <textarea class="ooc-box" rows="2" value=${ooc} autocomplete="off"
+                  placeholder="Out-of-character instruction to the model — it directs the story, it is not part of it."
+                  onInput=${ (e) => setOoc(e.currentTarget.value) }></textarea>`}
       <div class="composer-row">
         <button class="btn btn-ghost attach-btn" type="button" title="Attach an image"
                 disabled=${busy} onClick=${() => fileRef.current && fileRef.current.click()}>🖼</button>
@@ -237,8 +249,10 @@ export function Composer({ streaming, disabled, uploading, hasChoices, onSend, o
           onInput=${ (e) => setValue(e.currentTarget.value) }
           onKeyDown=${ (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); } } }
         ></textarea>
+        <button class=${'btn btn-ghost btn-ooc' + (showOoc ? ' active' : '')} type="button"
+                title="Add an out-of-character instruction" onClick=${() => setShowOoc((v) => !v)}>OOC</button>
         ${streaming
-          ? html`<button class="btn btn-danger" type="button" onClick=${onStop}>Stop</button>`
+          ? html`<button class="btn btn-danger" type="button" onClick=${onStop}>Cancel</button>`
           : html`<button class="btn btn-primary" type="button" disabled=${Boolean(disabled) || uploading} onClick=${submit}>${uploading ? '…' : 'Send'}</button>`}
       </div>
     </footer>`;

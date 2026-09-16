@@ -487,6 +487,7 @@ func (s *Server) handleMessage(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var body struct {
 		Text   string   `json:"text"`
+		OOC    string   `json:"ooc"`
 		Images []string `json:"images"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
@@ -494,9 +495,10 @@ func (s *Server) handleMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	text := strings.TrimSpace(body.Text)
+	ooc := strings.TrimSpace(body.OOC)
 	images := cleanAssetNames(body.Images)
-	if text == "" && len(images) == 0 {
-		writeError(w, http.StatusBadRequest, errors.New("text or images are required"))
+	if text == "" && ooc == "" && len(images) == 0 {
+		writeError(w, http.StatusBadRequest, errors.New("text, an OOC instruction or images are required"))
 		return
 	}
 
@@ -512,17 +514,22 @@ func (s *Server) handleMessage(w http.ResponseWriter, r *http.Request) {
 
 	user := &store.Message{
 		ID: store.NewID(), Role: "user", Kind: store.KindUser,
-		Speaker: sess.Persona.Name, Text: text, Images: images, CreatedAt: time.Now().UTC(),
+		Speaker: sess.Persona.Name, Text: text, OOC: ooc, Images: images, CreatedAt: time.Now().UTC(),
 	}
 	sess.Messages = append(sess.Messages, user)
-	sess.History = append(sess.History, llm.Message{Role: llm.RoleUser, Content: text, Images: assetImages(images), Ref: user.ID})
+	sess.History = append(sess.History, llm.Message{
+		Role:    llm.RoleUser,
+		Content: userTurnContent(text, ooc),
+		Images:  assetImages(images),
+		Ref:     user.ID,
+	})
 	// The player answered, so the previous branch offer is spent.
 	sess.PendingChoices = nil
 	sess.PendingPrompt = ""
 
 	title := ""
 	if strings.TrimSpace(sess.Title) == "" {
-		sess.Title = deriveTitle(firstNonEmpty(text, "A picture"))
+		sess.Title = deriveTitle(firstNonEmpty(text, ooc, "A picture"))
 		title = sess.Title
 	}
 	if err := s.store.Save(sess); err != nil {
@@ -598,6 +605,21 @@ func (s *Server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.streamTurn(w, r, sess, nil, "")
+}
+
+// userTurnContent merges a story message with an out-of-character directive.
+// The model sees one user turn; the UI keeps them in separate blocks.
+func userTurnContent(text, ooc string) string {
+	content := strings.TrimSpace(text)
+	directive := strings.TrimSpace(ooc)
+	if directive == "" {
+		return content
+	}
+	directive = "[OOC] " + directive
+	if content == "" {
+		return directive
+	}
+	return content + "\n\n" + directive
 }
 
 func lastUserMessageID(sess *store.Session) string {

@@ -170,17 +170,19 @@ export function App() {
     }
   }, [handleEvent, pushToast, refreshSessions]);
 
-  const send = useCallback(async (text, files) => {
+  const send = useCallback(async (text, files, ooc) => {
     const current = sessionRef.current;
     const value = String(text || '').trim();
+    const directive = String(ooc || '').trim();
     const picked = files || [];
-    if (!current || (!value && !picked.length)) return;
+    if (!current || (!value && !picked.length && !directive)) return;
     const pending = {
       id: 'pending-' + Date.now(),
       role: 'user',
       kind: 'user',
       speaker: (current.persona && current.persona.name) || '',
       text: value,
+      ooc: directive,
       localImages: picked.map((file) => URL.createObjectURL(file)),
       pending: true,
       createdAt: new Date().toISOString(),
@@ -196,7 +198,7 @@ export function App() {
           names.push(up.name);
         }
       }
-      await runStream('/api/sessions/' + current.id + '/messages', { text: value, images: names });
+      await runStream('/api/sessions/' + current.id + '/messages', { text: value, images: names, ooc: directive });
     } catch (err) {
       pushToast(err.message, 'error');
     } finally {
