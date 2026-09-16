@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from './vendor/hooks.module.
 import htm from './vendor/htm.module.js';
 import { api, uploadAsset } from './api.js';
 import * as C from './components.js';
+import { StoryModal } from './story.js';
 
 const html = htm.bind(h);
 const LS_KEY = 'genesis.lastSession';
@@ -20,6 +21,7 @@ export function App() {
   const [modal, setModal] = useState(null);
   const [tools, setTools] = useState([]);
   const [chatModels, setChatModels] = useState([]);
+  const [allTools, setAllTools] = useState([]);
   const [toasts, setToasts] = useState([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -343,7 +345,12 @@ export function App() {
         persona: { name: data.personaName, description: data.personaDesc },
         characters: chars.map((c) => ({ name: c.name, description: c.description, personality: c.personality, voice: c.voice })),
         greeting: data.greeting,
-        settings: { choicesEnabled: data.choicesEnabled, reasoningEffort: data.reasoningEffort },
+        settings: {
+          choicesEnabled: data.choicesEnabled,
+          reasoningEffort: data.reasoningEffort,
+          maxTokens: data.maxTokens,
+          disabledTools: data.disabledTools,
+        },
       });
       let changed = false;
       const characters = [];
@@ -387,7 +394,7 @@ export function App() {
     }
   }, [pushToast, refreshSessions, runStream]);
 
-  const saveCast = useCallback(async (data) => {
+  const saveStory = useCallback(async (data) => {
     const current = sessionRef.current;
     if (!current) return;
     try {
@@ -407,7 +414,13 @@ export function App() {
         const up = await uploadAsset(current.id, data.avatarFile);
         avatar = up.name;
       }
-      const updated = await api.patchSession(current.id, { title: data.title, avatar, characters });
+      const updated = await api.patchSession(current.id, {
+        title: data.title,
+        avatar,
+        model: data.model,
+        characters,
+        settings: data.settings,
+      });
       setSession(updated);
       setModal(null);
       await refreshSessions();
@@ -468,6 +481,12 @@ export function App() {
       }
       setSessions(list);
       await reloadChatModels(false);
+      try {
+        const toolList = await api.tools();
+        setAllTools(toolList.tools || []);
+      } catch (err) {
+        setAllTools([]);
+      }
       const last = localStorage.getItem(LS_KEY);
       const target = last && list.some((s) => s.id === last) ? last : list[0] && list[0].id;
       if (target) await openSession(target);
@@ -537,18 +556,19 @@ export function App() {
         activity=${activity}
         open=${panelOpen}
         onClose=${() => setPanelOpen(false)}
-        onEditCast=${() => setModal('cast')}
+        onEditCast=${() => setModal('story')}
       />
       ${modal === 'settings' && html`
         <${C.SettingsModal} config=${config} onClose=${() => setModal(null)} onSave=${saveConfig}
                             chatModels=${chatModels} onReloadModels=${reloadChatModels}
-                            onLoadSpeechModels=${loadSpeechModels} />`}
+                            onLoadSpeechModels=${loadSpeechModels} tools=${allTools} />`}
       ${modal === 'new' && html`
         <${C.NewStoryModal} config=${config} onClose=${() => setModal(null)} onCreate=${createStory}
-                            chatModels=${chatModels} onLoadSpeechModels=${loadSpeechModels} />`}
-      ${modal === 'cast' && session && html`
-        <${C.CastModal} session=${session} onClose=${() => setModal(null)} onSave=${saveCast}
-                        speechModel=${config && config.speechModel} onLoadSpeechModels=${loadSpeechModels} />`}
+                            chatModels=${chatModels} onLoadSpeechModels=${loadSpeechModels} tools=${allTools} />`}
+      ${modal === 'story' && session && html`
+        <${StoryModal} session=${session} onClose=${() => setModal(null)} onSave=${saveStory}
+                       chatModels=${chatModels} speechModel=${config && config.speechModel}
+                       onLoadSpeechModels=${loadSpeechModels} tools=${allTools} />`}
       ${modal === 'tools' && html`
         <${C.ToolsModal} tools=${tools} onClose=${() => setModal(null)} />`}
       <${C.Toasts} toasts=${toasts} />

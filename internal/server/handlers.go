@@ -116,7 +116,9 @@ type chatModelInfo struct {
 	ID      string `json:"id"`
 	Name    string `json:"name"`
 	Context int    `json:"context"`
-	Tools   bool   `json:"tools"`
+	// MaxOutput is the provider's maximum completion tokens for this model.
+	MaxOutput int  `json:"maxOutput"`
+	Tools     bool `json:"tools"`
 }
 
 func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
@@ -165,6 +167,9 @@ func fetchChatModels(ctx context.Context, baseURL, apiKey string) ([]chatModelIn
 			Architecture        struct {
 				OutputModalities []string `json:"output_modalities"`
 			} `json:"architecture"`
+			TopProvider struct {
+				MaxCompletionTokens int `json:"max_completion_tokens"`
+			} `json:"top_provider"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(body, &parsed); err != nil {
@@ -182,11 +187,16 @@ func fetchChatModels(ctx context.Context, baseURL, apiKey string) ([]chatModelIn
 		if name == "" {
 			name = m.ID
 		}
+		maxOutput := m.TopProvider.MaxCompletionTokens
+		if maxOutput <= 0 {
+			maxOutput = m.ContextLength
+		}
 		out = append(out, chatModelInfo{
-			ID:      m.ID,
-			Name:    name,
-			Context: m.ContextLength,
-			Tools:   hasString(m.SupportedParameters, "tools"),
+			ID:        m.ID,
+			Name:      name,
+			Context:   m.ContextLength,
+			MaxOutput: maxOutput,
+			Tools:     hasString(m.SupportedParameters, "tools"),
 		})
 	}
 	sort.SliceStable(out, func(i, j int) bool {
@@ -213,13 +223,14 @@ func (s *Server) handleTools(w http.ResponseWriter, _ *http.Request) {
 
 // settingsInput distinguishes "absent" from a zero value.
 type settingsInput struct {
-	Temperature     *float64 `json:"temperature"`
-	MaxTokens       *int     `json:"maxTokens"`
-	MaxSteps        *int     `json:"maxSteps"`
-	ToolChoice      *string  `json:"toolChoice"`
-	SystemPrompt    *string  `json:"systemPrompt"`
-	ReasoningEffort *string  `json:"reasoningEffort"`
-	ChoicesEnabled  *bool    `json:"choicesEnabled"`
+	Temperature     *float64  `json:"temperature"`
+	MaxTokens       *int      `json:"maxTokens"`
+	MaxSteps        *int      `json:"maxSteps"`
+	ToolChoice      *string   `json:"toolChoice"`
+	SystemPrompt    *string   `json:"systemPrompt"`
+	ReasoningEffort *string   `json:"reasoningEffort"`
+	ChoicesEnabled  *bool     `json:"choicesEnabled"`
+	DisabledTools   *[]string `json:"disabledTools"`
 }
 
 func applySettings(dst *store.Settings, in *settingsInput) {
@@ -247,6 +258,23 @@ func applySettings(dst *store.Settings, in *settingsInput) {
 	if in.ChoicesEnabled != nil {
 		dst.ChoicesEnabled = *in.ChoicesEnabled
 	}
+	if in.DisabledTools != nil {
+		dst.DisabledTools = cleanToolNames(*in.DisabledTools)
+	}
+}
+
+func cleanToolNames(in []string) []string {
+	out := make([]string, 0, len(in))
+	seen := map[string]bool{}
+	for _, name := range in {
+		name = strings.TrimSpace(name)
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		out = append(out, name)
+	}
+	return out
 }
 
 type characterInput struct {
@@ -326,6 +354,7 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 			ToolChoice:      cfg.ToolChoice,
 			ReasoningEffort: cfg.ReasoningEffort,
 			ChoicesEnabled:  cfg.ChoicesEnabled,
+			DisabledTools:   cfg.DisabledTools,
 		},
 		State: map[string]any{},
 	}

@@ -38,6 +38,9 @@ type Settings struct {
 	SystemPrompt    string  `json:"systemPrompt,omitempty"`
 	ReasoningEffort string  `json:"reasoningEffort,omitempty"`
 	ChoicesEnabled  bool    `json:"choicesEnabled"`
+	// DisabledTools lists tool names switched off for this story. An empty
+	// list means every registered tool is available.
+	DisabledTools []string `json:"disabledTools,omitempty"`
 }
 
 // Persona describes the player.

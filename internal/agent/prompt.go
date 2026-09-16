@@ -16,14 +16,10 @@ narrate the world around the player.
 
 # Output protocol
 You never reply with plain text. Every response is one or more tool calls.
-- message: speak or narrate to the player. Use the exact character name in
-  speaker, and kind speech, action or narration. Call it several times to build
-  a scene beat by beat.
-- think: a character's private inner thought. Keep it in that character's
-  voice; it is shown to the player as a dimmed bubble.
-- update_state: persist durable facts (inventory, stats, flags, promises,
-  relationship values, scene facts). This is the only memory that survives.
-- choices: finish the turn by offering the player the next branches.
+- Use only the tools listed below; never invent one.
+- Express narration, dialogue, inner thought and state changes through tools.
+- Persist durable facts: inventory, stats, flags, promises, relationships.
+- Never invent a tool result.
 
 # Craft
 - Stay in character and honour every character card.
@@ -38,19 +34,24 @@ func (a *Agent) SystemPrompt(sess *store.Session) string {
 	var b strings.Builder
 	b.WriteString(agentPreamble)
 
+	active := a.activeTools(sess)
+
 	b.WriteString("\n# Tools you may call\n")
-	for _, t := range a.registry.All() {
+	for _, t := range active {
 		fmt.Fprintf(&b, "- %s: %s\n", t.Name, t.Description)
 	}
+	b.WriteString("- Every tool also accepts last_call. Set last_call=true on the call you believe is your " +
+		"final one for this turn.\n")
 
-	if sess.Settings.ChoicesEnabled {
+	if hasTool(active, "choices") {
 		b.WriteString("\n# Ending the turn (mandatory)\n")
 		b.WriteString("Every turn MUST end with the choices tool. After your message and think calls, call " +
-			"choices with the scene's next branches. Never return plain text and never stop without it.\n")
+			"choices with the scene's next branches. last_call does not end the turn while choices is " +
+			"enabled; never return plain text and never stop without calling choices.\n")
 	} else {
 		b.WriteString("\n# Ending the turn\n")
-		b.WriteString("When the scene has been told, stop calling tools. The choices tool is optional here; " +
-			"use it only when presenting a decision would help.\n")
+		b.WriteString("The choices tool is not available. When the scene is told, end the turn by setting " +
+			"last_call=true on your final tool call.\n")
 	}
 
 	cfg := a.config()

@@ -242,6 +242,12 @@ hr { border: none; border-top: 1px solid var(--border); margin: 2px 0; }
 .switch { display: flex; align-items: center; gap: 8px; font-size: 13.5px; }
 .switch input { width: auto; }
 
+.tool-toggles { display: flex; flex-direction: column; gap: 6px; }
+.toggle-row { display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; gap: 2px 8px; align-items: center; padding: 7px 10px; border: 1px solid var(--border); border-radius: 10px; }
+.toggle-row input { grid-row: 1 / span 2; width: auto; }
+.toggle-name { font-family: var(--mono); font-size: 13px; }
+.toggle-desc { grid-column: 2; color: var(--muted); font-size: 12px; }
+
 .msg-actions { display: flex; gap: 6px; margin-top: 4px; opacity: .35; transition: opacity .15s; }
 .msg:hover .msg-actions { opacity: 1; }
 .speak-btn { border: 1px solid var(--border); background: var(--bg-elev); border-radius: 999px; padding: 2px 9px; font-size: 13px; cursor: pointer; line-height: 1.4; }

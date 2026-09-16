@@ -13,24 +13,25 @@ import (
 
 // Config is the persisted application configuration.
 type Config struct {
-	APIKey            string  `json:"apiKey"`
-	BaseURL           string  `json:"baseUrl"`
-	Model             string  `json:"model"`
-	Addr              string  `json:"addr"`
-	DataDir           string  `json:"dataDir"`
-	Temperature       float64 `json:"temperature"`
-	MaxTokens         int     `json:"maxTokens"`
-	MaxSteps          int     `json:"maxSteps"`
-	ToolChoice        string  `json:"toolChoice"`
-	SystemPrompt      string  `json:"systemPrompt"`
-	ParallelToolCalls bool    `json:"parallelToolCalls"`
-	ReasoningEffort   string  `json:"reasoningEffort"`
-	ChoicesEnabled    bool    `json:"choicesEnabled"`
-	SpeechModel       string  `json:"speechModel"`
-	SpeechVoice       string  `json:"speechVoice"`
-	SpeechFormat      string  `json:"speechFormat"`
-	SpeechSpeed       float64 `json:"speechSpeed"`
-	AutoSpeak         bool    `json:"autoSpeak"`
+	APIKey            string   `json:"apiKey"`
+	BaseURL           string   `json:"baseUrl"`
+	Model             string   `json:"model"`
+	Addr              string   `json:"addr"`
+	DataDir           string   `json:"dataDir"`
+	Temperature       float64  `json:"temperature"`
+	MaxTokens         int      `json:"maxTokens"`
+	MaxSteps          int      `json:"maxSteps"`
+	ToolChoice        string   `json:"toolChoice"`
+	SystemPrompt      string   `json:"systemPrompt"`
+	ParallelToolCalls bool     `json:"parallelToolCalls"`
+	ReasoningEffort   string   `json:"reasoningEffort"`
+	ChoicesEnabled    bool     `json:"choicesEnabled"`
+	SpeechModel       string   `json:"speechModel"`
+	SpeechVoice       string   `json:"speechVoice"`
+	SpeechFormat      string   `json:"speechFormat"`
+	SpeechSpeed       float64  `json:"speechSpeed"`
+	AutoSpeak         bool     `json:"autoSpeak"`
+	DisabledTools     []string `json:"disabledTools"`
 }
 
 // Default returns the built-in defaults.
@@ -211,6 +212,7 @@ func (s *Store) Public() map[string]any {
 		"speechFormat":      c.SpeechFormat,
 		"speechSpeed":       c.SpeechSpeed,
 		"autoSpeak":         c.AutoSpeak,
+		"disabledTools":     c.DisabledTools,
 	}
 }
 

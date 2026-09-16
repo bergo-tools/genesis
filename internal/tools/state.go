@@ -23,6 +23,7 @@ func updateStateTool() *agent.Tool {
 			"value": map[string]any{
 				"description": "Value for set/add/append. Ignored for delete and toggle.",
 			},
+			"last_call": lastCallProp(),
 		}, "path", "op"),
 		Handler: func(_ context.Context, tc *agent.TurnContext, args json.RawMessage) (any, error) {
 			var a struct {

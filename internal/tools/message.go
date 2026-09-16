@@ -18,10 +18,11 @@ func messageTool() *agent.Tool {
 			"(quoted dialogue), action (a physical deed) or narration (world description). Call it " +
 			"several times to build a scene beat by beat.",
 		Parameters: object(map[string]any{
-			"speaker": stringProp("Exact name of the character speaking or acting. Use Narrator for world description."),
-			"text":    stringProp("The line or description. Do not wrap the whole line in quotes."),
-			"kind":    enumProp("Message kind.", "speech", "action", "narration"),
-			"mood":    stringProp("Optional short mood label for the speaker."),
+			"speaker":   stringProp("Exact name of the character speaking or acting. Use Narrator for world description."),
+			"text":      stringProp("The line or description. Do not wrap the whole line in quotes."),
+			"kind":      enumProp("Message kind.", "speech", "action", "narration"),
+			"mood":      stringProp("Optional short mood label for the speaker."),
+			"last_call": lastCallProp(),
 		}, "text"),
 		Handler: func(_ context.Context, tc *agent.TurnContext, args json.RawMessage) (any, error) {
 			var a struct {

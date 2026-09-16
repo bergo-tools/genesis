@@ -323,7 +323,7 @@ export function CharacterEditor({ character, index, sessionId, onChange, onRemov
     </div>`;
 }
 
-function ReasoningSelect({ value, onChange }) {
+export function ReasoningSelect({ value, onChange }) {
   return html`
     <label class="field"><span>Thinking effort</span>
       <select value=${value} onChange=${ (e) => onChange(e.currentTarget.value) }>
@@ -332,7 +332,32 @@ function ReasoningSelect({ value, onChange }) {
     </label>`;
 }
 
-export function SettingsModal({ config, onClose, onSave, chatModels, onReloadModels, onLoadSpeechModels }) {
+export function ToolToggles({ tools, choicesEnabled, disabledTools, onChoices, onToggle }) {
+  const list = tools || [];
+  if (!list.length) {
+    return html`<p class="muted">No tools registered.</p>`;
+  }
+  return html`
+    <div class="tool-toggles">
+      ${list.map((t) => {
+        const isChoices = t.name === 'choices';
+        const enabled = isChoices ? choicesEnabled : !(disabledTools || []).includes(t.name);
+        const change = (e) => {
+          const on = e.currentTarget.checked;
+          if (isChoices) onChoices(on);
+          else onToggle(t.name, on);
+        };
+        return html`
+          <label class="toggle-row" key=${t.name}>
+            <input type="checkbox" checked=${enabled} onChange=${change} />
+            <span class="toggle-name">${t.name}</span>
+            <span class="toggle-desc">${isChoices ? 'ends every turn; required when enabled' : t.description}</span>
+          </label>`;
+      })}
+    </div>`;
+}
+
+export function SettingsModal({ config, onClose, onSave, chatModels, onReloadModels, onLoadSpeechModels, tools }) {
   const cfg = config || {};
   const [form, setForm] = useState({
     apiKey: '',
@@ -350,6 +375,7 @@ export function SettingsModal({ config, onClose, onSave, chatModels, onReloadMod
     speechFormat: cfg.speechFormat || 'mp3',
     speechSpeed: cfg.speechSpeed != null ? cfg.speechSpeed : 1,
     autoSpeak: cfg.autoSpeak === true,
+    disabledTools: cfg.disabledTools || [],
   });
   const [speechModels, setSpeechModels] = useState([]);
   const [busy, setBusy] = useState(false);
@@ -366,6 +392,14 @@ export function SettingsModal({ config, onClose, onSave, chatModels, onReloadMod
   }, [onLoadSpeechModels]);
   const voiceOptions = ((speechModels.find((m) => m.id === form.speechModel) || {}).voices) || [];
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.currentTarget.value }));
+  const applyModel = (id) => {
+    const found = (chatModels || []).find((m) => m.id === id);
+    setForm((f) => ({ ...f, model: id, maxTokens: found && found.maxOutput ? found.maxOutput : f.maxTokens }));
+  };
+  const currentModel = (chatModels || []).find((m) => m.id === form.model);
+  const modelHint = currentModel
+    ? 'context ' + Math.round(currentModel.context / 1000) + 'k · max output ' + Math.round(currentModel.maxOutput / 1000) + 'k'
+    : (chatModels || []).length + ' models · ' + (chatModels || []).filter((m) => m.tools).length + ' support tools';
   const reload = async () => {
     setBusy(true);
     try {
@@ -390,6 +424,7 @@ export function SettingsModal({ config, onClose, onSave, chatModels, onReloadMod
       speechFormat: form.speechFormat,
       speechSpeed: Number(form.speechSpeed),
       autoSpeak: form.autoSpeak,
+      disabledTools: form.disabledTools,
     };
     if (form.apiKey.trim()) body.apiKey = form.apiKey.trim();
     onSave(body);
@@ -407,10 +442,12 @@ export function SettingsModal({ config, onClose, onSave, chatModels, onReloadMod
           <label class="field"><span>Base URL</span><input type="text" value=${form.baseUrl} onInput=${set('baseUrl')} /></label>
           <div class="row">
             <label class="field grow"><span>Model</span>
-              <input type="text" list="chat-model-options" value=${form.model} onInput=${set('model')} /></label>
+              <input type="text" list="chat-model-options" value=${form.model}
+                     onInput=${ (e) => setForm((f) => ({ ...f, model: e.currentTarget.value })) }
+                     onChange=${ (e) => applyModel(e.currentTarget.value) } /></label>
             <button class="btn btn-ghost btn-sm" type="button" disabled=${busy} onClick=${reload}>${busy ? '…' : 'Reload'}</button>
           </div>
-          <span class="hint">${(chatModels || []).length + ' models · ' + (chatModels || []).filter((m) => m.tools).length + ' support tools'}</span>
+          <span class="hint">${modelHint}</span>
           <datalist id="chat-model-options">
             ${(chatModels || []).map((m) => html`<option value=${m.id} label=${modelLabel(m)} key=${m.id}></option>`)}
           </datalist>
@@ -423,16 +460,25 @@ export function SettingsModal({ config, onClose, onSave, chatModels, onReloadMod
               <input type="number" min="1" max="40" value=${form.maxSteps} onInput=${set('maxSteps')} /></label>
           </div>
           <ReasoningSelect value=${form.reasoningEffort} onChange=${ (v) => setForm((f) => ({ ...f, reasoningEffort: v })) } />
-          <label class="switch">
-            <input type="checkbox" checked=${form.choicesEnabled}
-                   onChange=${ (e) => setForm((f) => ({ ...f, choicesEnabled: e.currentTarget.checked })) } />
-            Require the choices tool at the end of every turn
-          </label>
+          <hr />
+          <strong>Tools</strong>
+          <ToolToggles
+            tools=${tools}
+            choicesEnabled=${form.choicesEnabled}
+            disabledTools=${form.disabledTools}
+            onChoices=${ (on) => setForm((f) => ({ ...f, choicesEnabled: on })) }
+            onToggle=${ (name, on) => setForm((f) => ({
+              ...f,
+              disabledTools: on ? f.disabledTools.filter((n) => n !== name) : f.disabledTools.concat([name]),
+            })) } />
           <hr />
           <strong>Text to speech</strong>
           <div class="grid-2">
             <label class="field"><span>Speech model</span>
-              <input type="text" placeholder="openai/gpt-4o-mini-tts" value=${form.speechModel} onInput=${set('speechModel')} /></label>
+              <input type="text" list="speech-model-options" placeholder="hexgrad/kokoro-82m"
+                     value=${form.speechModel}
+                     onInput=${set('speechModel')} />
+              <span class="hint">${speechModels.length + ' TTS models'}</span></label>
             <label class="field"><span>Default voice</span>
               <input type="text" list="speech-voice-options" placeholder="af_heart"
                      value=${form.speechVoice} onInput=${set('speechVoice')} />
@@ -440,6 +486,9 @@ export function SettingsModal({ config, onClose, onSave, chatModels, onReloadMod
                 ? 'Voice catalog unavailable — type a voice your model supports.'
                 : voiceOptions.length + ' voices for this model'}</span></label>
           </div>
+          <datalist id="speech-model-options">
+            ${speechModels.map((m) => html`<option value=${m.id} label=${m.name + ' · ' + (m.voices || []).length + ' voices'} key=${m.id}></option>`)}
+          </datalist>
           <datalist id="speech-voice-options">
             ${voiceOptions.map((v) => html`<option value=${v} key=${v}></option>`)}
           </datalist>
@@ -483,7 +532,7 @@ function newCharacter() {
   return { key: 'c' + Math.random().toString(36).slice(2), id: '', name: '', description: '', personality: '', avatar: '', voice: '', avatarFile: null, avatarPreview: '' };
 }
 
-export function NewStoryModal({ config, onClose, onCreate, chatModels, onLoadSpeechModels }) {
+export function NewStoryModal({ config, onClose, onCreate, chatModels, onLoadSpeechModels, tools }) {
   const cfg = config || {};
   const [speechModels, setSpeechModels] = useState([]);
   useEffect(() => {
@@ -503,7 +552,9 @@ export function NewStoryModal({ config, onClose, onCreate, chatModels, onLoadSpe
   const [personaDesc, setPersonaDesc] = useState('');
   const [greeting, setGreeting] = useState('');
   const [model, setModel] = useState(cfg.model || '');
+  const [maxTokens, setMaxTokens] = useState(cfg.maxTokens || 2048);
   const [choicesEnabled, setChoicesEnabled] = useState(true);
+  const [disabledTools, setDisabledTools] = useState(cfg.disabledTools || []);
   const [reasoningEffort, setReasoningEffort] = useState(cfg.reasoningEffort || 'off');
   const [characters, setCharacters] = useState([newCharacter()]);
   const [avatarFile, setAvatarFile] = useState(null);
@@ -524,7 +575,7 @@ export function NewStoryModal({ config, onClose, onCreate, chatModels, onLoadSpe
     try {
       await onCreate({
         title, personaName, personaDesc, greeting, model, choicesEnabled, reasoningEffort,
-        avatarFile, characters,
+        maxTokens, disabledTools, avatarFile, characters,
       });
     } finally {
       setBusy(false);
@@ -569,103 +620,32 @@ export function NewStoryModal({ config, onClose, onCreate, chatModels, onLoadSpe
           <div class="grid-2">
             <label class="field"><span>Model</span>
               <input type="text" list="new-story-model-options" value=${model}
+                     onChange=${ (e) => {
+                       const found = (chatModels || []).find((m) => m.id === e.currentTarget.value);
+                       if (found && found.maxOutput) setMaxTokens(found.maxOutput);
+                     } }
                      onInput=${ (e) => setModel(e.currentTarget.value) } /></label>
             <ReasoningSelect value=${reasoningEffort} onChange=${setReasoningEffort} />
           </div>
           <datalist id="new-story-model-options">
             ${(chatModels || []).map((m) => html`<option value=${m.id} label=${modelLabel(m)} key=${m.id}></option>`)}
           </datalist>
-          <label class="switch">
-            <input type="checkbox" checked=${choicesEnabled}
-                   onChange=${ (e) => setChoicesEnabled(e.currentTarget.checked) } />
-            Require the choices tool at the end of every turn
-          </label>
+          <label class="field"><span>Max output tokens</span>
+            <input type="number" min="64" step="64" value=${maxTokens}
+                   onInput=${ (e) => setMaxTokens(Number(e.currentTarget.value)) } />
+            <span class="hint">auto-filled from the chosen model (OpenRouter's max)</span></label>
+          <hr />
+          <strong>Tools</strong>
+          <ToolToggles
+            tools=${tools}
+            choicesEnabled=${choicesEnabled}
+            disabledTools=${disabledTools}
+            onChoices=${setChoicesEnabled}
+            onToggle=${ (name, on) => setDisabledTools((cur) => (on ? cur.filter((n) => n !== name) : cur.concat([name]))) } />
         </div>
         <footer class="modal-foot">
           <button class="btn btn-ghost" type="button" onClick=${onClose}>Cancel</button>
           <button class="btn btn-primary" type="button" disabled=${busy} onClick=${create}>${busy ? 'Working…' : 'Create'}</button>
-        </footer>
-      </div>
-    </div>`;
-}
-
-export function CastModal({ session, onClose, onSave, speechModel, onLoadSpeechModels }) {
-  const [speechModels, setSpeechModels] = useState([]);
-  useEffect(() => {
-    let alive = true;
-    if (onLoadSpeechModels) {
-      onLoadSpeechModels().then((list) => {
-        if (alive) setSpeechModels(list || []);
-      });
-    }
-    return () => {
-      alive = false;
-    };
-  }, [onLoadSpeechModels]);
-  const voiceOptions = ((speechModels.find((m) => m.id === speechModel) || {}).voices) || [];
-  const [title, setTitle] = useState((session && session.title) || '');
-  const [avatar, setAvatar] = useState((session && session.avatar) || '');
-  const [avatarFile, setAvatarFile] = useState(null);
-  const [avatarPreview, setAvatarPreview] = useState('');
-  const [characters, setCharacters] = useState(() => ((session && session.characters) || []).map((c) => ({
-    key: 'c' + Math.random().toString(36).slice(2),
-    id: c.id || '', name: c.name || '', description: c.description || '',
-    personality: c.personality || '', avatar: c.avatar || '', voice: c.voice || '',
-    avatarFile: null, avatarPreview: '',
-  })));
-  const [busy, setBusy] = useState(false);
-
-  const update = (index, patch) => setCharacters((cur) => cur.map((c, i) => (i === index ? { ...c, ...patch } : c)));
-  const remove = (index) => setCharacters((cur) => cur.filter((_, i) => i !== index));
-  const pickStoryAvatar = (e) => {
-    const file = e.currentTarget.files && e.currentTarget.files[0];
-    if (file) {
-      setAvatarFile(file);
-      setAvatarPreview(URL.createObjectURL(file));
-    }
-  };
-  const save = async () => {
-    setBusy(true);
-    try {
-      await onSave({ title, avatar, avatarFile, characters });
-    } finally {
-      setBusy(false);
-    }
-  };
-  const src = avatarPreview || (avatar && session ? assetURL(session.id, avatar) : '');
-  return html`
-    <div class="modal" onClick=${ (e) => { if (e.target === e.currentTarget) onClose(); } }>
-      <div class="modal-card">
-        <header class="modal-head"><h2>Edit cast</h2>
-          <button class="icon-btn" type="button" onClick=${onClose}>×</button></header>
-        <div class="modal-body">
-          <div class="story-avatar-row">
-            <label class="avatar-picker" title="Story avatar">
-              ${src ? html`<img src=${src} alt="" />` : '+'}
-              <input type="file" accept="image/*" onChange=${pickStoryAvatar} />
-            </label>
-            <label class="field grow"><span>Story title</span>
-              <input type="text" value=${title} onInput=${ (e) => setTitle(e.currentTarget.value) } /></label>
-          </div>
-          <div>
-            <div class="row" style="justify-content:space-between;align-items:center">
-              <strong>Cast</strong>
-              <button class="btn btn-ghost btn-sm" type="button"
-                      onClick=${ () => setCharacters((cur) => cur.concat([{
-                        key: 'c' + Math.random().toString(36).slice(2), id: '', name: '', description: '',
-                        personality: '', avatar: '', voice: '', avatarFile: null, avatarPreview: '',
-                      }])) }>+ Add character</button>
-            </div>
-            ${characters.map((c, i) => html`
-              <div key=${c.key} style="margin-top:10px">
-                <${CharacterEditor} character=${c} index=${i} sessionId=${session ? session.id : ''} voiceOptions=${voiceOptions}
-                  onChange=${update} onRemove=${remove} canRemove=${characters.length > 1} />
-              </div>`)}
-          </div>
-        </div>
-        <footer class="modal-foot">
-          <button class="btn btn-ghost" type="button" onClick=${onClose}>Cancel</button>
-          <button class="btn btn-primary" type="button" disabled=${busy} onClick=${save}>${busy ? 'Saving…' : 'Save'}</button>
         </footer>
       </div>
     </div>`;

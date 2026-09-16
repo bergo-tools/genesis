@@ -16,6 +16,11 @@ OpenRouter 的 chat 接口由官方 SDK [`github.com/OpenRouterTeam/go-sdk`](htt
 | `update_state` | 记录玩家要求记住的信息（物品、数值、旗标、关系、场景事实） | 否 |
 | `choices` | 输出场景描述 + 2–4 个后续选项，把控制权交还玩家 | **是（terminal）** |
 
+每个工具都带一个可选参数 `last_call`：模型在自己认为是本轮最后一次调用时置为 `true`。
+当 choices 未启用时，`last_call` 会结束本轮；当 choices 启用时，它被忽略，模型仍必须调用
+`choices` 收尾（缺失则由 agent loop 提醒，最多 2 次）。工具可在全局 Settings 与每个
+story 的 Story settings 里逐个开关。
+
 **choices 强制机制**：当 story 开启 choices 后，system prompt 要求「每回合必须以 choices 结束」；
 如果模型某一轮结束后没有调用 choices，**agent loop 会自动追加一条提醒消息并继续**（最多 2 次），
 仍失败才会结束并给出提示。玩家除了点选项，也可以直接在输入框里写自己的行动。
@@ -28,10 +33,14 @@ OpenRouter 的 chat 接口由官方 SDK [`github.com/OpenRouterTeam/go-sdk`](htt
 - **图片**：story 头像、角色头像、聊天中发图都支持；聊天图片会以多模态（base64 data URL）
   一起发给模型，具备视觉能力的模型可以直接看到。
 - **重新 roll**：一键丢弃上一轮 AI 输出并重写，换一个走向。
-- **思考强度可调**：off / minimal / low / medium / high / max（关闭思考即 off）。
+- **思考强度可调**：off / minimal / low / medium / high / max（关闭思考即 off）。Settings 里设全局
+  默认，**每个 story 也能在 Story settings 里单独改**（含关闭）。
 - **语音（TTS）**：通过 OpenRouter 合成语音，可配置 speech 模型与音色，逐块朗读任意文本。
-- **模型列表自动加载**：Settings 与 New story 的文字模型输入都是从 OpenRouter 拉取的
-  datalist，标注上下文长度与是否支持 tools（支持工具调用的排在前面），无需手动加载。
+- **模型列表自动加载**：Settings、New story、Story settings 的文字模型输入都是从 OpenRouter
+  拉取的 datalist，标注上下文长度与是否支持 tools（支持工具调用的排在前面）；选中模型时会
+  **把 max tokens 自动填成 OpenRouter 返回的该模型最大输出**。
+- **工具可开关**：每个 story 可单独启用/禁用工具；所有工具都带 `last_call` 参数，模型用它表示
+  「这是本轮最后一次调用」——除非 choices 已启用（那时必须以 choices 收尾）。
 - **每个 story 一个目录**，删掉目录即彻底清理，便于备份与批量删除。
 - **流式 agent 循环**：NDJSON 事件流实时推送 thinking、工具调用、消息、状态、选项与用量。
 - **持久化**：story 以 JSON 原子写入；配置在 `config.json`（API key 可来自 `.env`）。
@@ -162,6 +171,8 @@ func weatherTool() *agent.Tool {
 
 - 模型被要求「永不输出纯文本」，一律用工具表达；若它仍输出文本，会被兜底渲染成旁白。
 - **choices**：开启时强制在回合末尾调用；缺失则 agent loop 自动提醒并继续（最多 2 次）。
+- **last_call**：所有工具都接受该参数；choices 未启用时用于结束本轮，启用时被忽略。
+- **工具开关**：被禁用的工具不会出现在 system prompt、也不会出现在请求的 tools 列表里。
 - **思考强度**：以 `reasoning_effort` 透传；`off` 映射为 `none`（关闭）。
 - **多模态**：聊天图片在构造请求时读取资源并转成 `data:image/...;base64` 内容块；
   持久化只存文件名，不会把 base64 写进 `story.json`。

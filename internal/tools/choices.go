@@ -24,6 +24,7 @@ func choicesTool() *agent.Tool {
 				"text":        stringProp("Short imperative label."),
 				"description": stringProp("Optional one-line detail."),
 			}, "text")),
+			"last_call": lastCallProp(),
 		}, "choices"),
 		Handler: func(_ context.Context, tc *agent.TurnContext, args json.RawMessage) (any, error) {
 			var a struct {

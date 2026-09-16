@@ -38,6 +38,14 @@ func arrayProp(desc string, items map[string]any) map[string]any {
 	return map[string]any{"type": "array", "description": desc, "items": items}
 }
 
+// lastCallProp is added to every tool. The model sets it on the call it
+// believes should end the turn; the agent honours it unless the choices tool
+// is enabled, in which case choices must still close the turn.
+func lastCallProp() map[string]any {
+	return boolProp("Set true when you believe this is your final tool call for this turn. " +
+		"It ends the turn, unless the choices tool is enabled, in which case you must still call choices.")
+}
+
 func decode(raw json.RawMessage, dst any) error {
 	raw = bytes.TrimSpace(raw)
 	if len(raw) == 0 {

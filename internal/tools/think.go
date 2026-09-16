@@ -18,8 +18,9 @@ func thinkTool() *agent.Tool {
 			"thought bubble, so keep it in that character's voice: subtext, doubt, want, or a plan. " +
 			"Use it before deciding how the character acts.",
 		Parameters: object(map[string]any{
-			"speaker": stringProp("Name of the character whose head we are in. Defaults to the lead character."),
-			"text":    stringProp("The inner thought."),
+			"speaker":   stringProp("Name of the character whose head we are in. Defaults to the lead character."),
+			"text":      stringProp("The inner thought."),
+			"last_call": lastCallProp(),
 		}, "text"),
 		Handler: func(_ context.Context, tc *agent.TurnContext, args json.RawMessage) (any, error) {
 			var a struct {

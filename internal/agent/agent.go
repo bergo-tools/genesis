@@ -97,7 +97,8 @@ func (a *Agent) Continue(ctx context.Context, sess *store.Session, emit func(Eve
 	if reasoning == "" {
 		reasoning = cfg.ReasoningEffort
 	}
-	choicesEnabled := sess.Settings.ChoicesEnabled
+	active := a.activeTools(sess)
+	choicesRequired := hasTool(active, "choices")
 
 	turnPlayerFacing := false
 	turnChoices := false
@@ -112,7 +113,7 @@ func (a *Agent) Continue(ctx context.Context, sess *store.Session, emit func(Eve
 		resp, err := client.Complete(ctx, llm.Request{
 			Model:             sess.Model,
 			Messages:          a.buildMessages(sess),
-			Tools:             a.registry.Defs(),
+			Tools:             toolDefs(active),
 			ToolChoice:        toolChoice,
 			Temperature:       temp,
 			MaxTokens:         maxTokens,
@@ -146,7 +147,7 @@ func (a *Agent) Continue(ctx context.Context, sess *store.Session, emit func(Eve
 			}
 			turnPlayerFacing = turnPlayerFacing || tc.PlayerFacing
 
-			if choicesEnabled && !turnChoices {
+			if choicesRequired && !turnChoices {
 				if reminders < maxReminders {
 					reminders++
 					appendReminder(sess, choicesReminder)
@@ -173,9 +174,13 @@ func (a *Agent) Continue(ctx context.Context, sess *store.Session, emit func(Eve
 		})
 
 		terminal := false
+		lastCall := false
 		for _, call := range resp.ToolCalls {
 			if call.Name == "choices" {
 				tc.ChoicesOffered = true
+			}
+			if wantsLastCall(call.Arguments) {
+				lastCall = true
 			}
 			a.executeTool(ctx, tc, call)
 			if tool, ok := a.registry.Get(call.Name); ok && tool.Terminal {
@@ -188,7 +193,7 @@ func (a *Agent) Continue(ctx context.Context, sess *store.Session, emit func(Eve
 		if terminal || turnChoices {
 			break
 		}
-		if choicesEnabled {
+		if choicesRequired {
 			if reminders < maxReminders {
 				reminders++
 				appendReminder(sess, choicesReminder)
@@ -197,8 +202,74 @@ func (a *Agent) Continue(ctx context.Context, sess *store.Session, emit func(Eve
 			emit(Event{Type: EventNotice, Step: step, Text: "The model did not call choices; ending the turn."})
 			break
 		}
+		if lastCall {
+			if turnPlayerFacing {
+				break
+			}
+			if reminders < maxReminders {
+				reminders++
+				appendReminder(sess, messageReminder)
+				continue
+			}
+			break
+		}
 	}
 	return nil
+}
+
+// activeTools returns the tools exposed to the model for this story, honouring
+// the per-story disabled list and the choices toggle.
+func (a *Agent) activeTools(sess *store.Session) []*Tool {
+	disabled := map[string]bool{}
+	if sess != nil {
+		for _, name := range sess.Settings.DisabledTools {
+			disabled[strings.TrimSpace(name)] = true
+		}
+	}
+	choicesOn := sess != nil && sess.Settings.ChoicesEnabled && !disabled["choices"]
+	out := make([]*Tool, 0, len(a.registry.All()))
+	for _, t := range a.registry.All() {
+		if disabled[t.Name] {
+			continue
+		}
+		if t.Name == "choices" && !choicesOn {
+			continue
+		}
+		out = append(out, t)
+	}
+	return out
+}
+
+func toolDefs(tools []*Tool) []llm.ToolDef {
+	out := make([]llm.ToolDef, 0, len(tools))
+	for _, t := range tools {
+		out = append(out, llm.ToolDef{Name: t.Name, Description: t.Description, Parameters: t.Parameters})
+	}
+	return out
+}
+
+func hasTool(tools []*Tool, name string) bool {
+	for _, t := range tools {
+		if t.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+// wantsLastCall reports whether a tool call carries last_call=true.
+func wantsLastCall(args string) bool {
+	args = strings.TrimSpace(args)
+	if args == "" || !json.Valid([]byte(args)) {
+		return false
+	}
+	var probe struct {
+		LastCall bool `json:"last_call"`
+	}
+	if err := json.Unmarshal([]byte(args), &probe); err != nil {
+		return false
+	}
+	return probe.LastCall
 }
 
 func appendReminder(sess *store.Session, text string) {
