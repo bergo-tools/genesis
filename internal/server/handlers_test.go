@@ -18,11 +18,15 @@ func newTestServer(t *testing.T) (*Server, *config.Store) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	st, err := store.New(t.TempDir())
+	st, err := store.New(filepath.Join(t.TempDir(), "sessions"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	return New(cfg, st, agent.NewRegistry()), cfg
+	stories, err := store.NewStoryStore(filepath.Join(t.TempDir(), "stories"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return New(cfg, st, stories, agent.NewRegistry()), cfg
 }
 
 func putConfig(t *testing.T, srv *Server, body string) *httptest.ResponseRecorder {

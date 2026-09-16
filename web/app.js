@@ -4,6 +4,7 @@ import htm from './vendor/htm.module.js';
 import { api, uploadAsset } from './api.js';
 import * as C from './components.js';
 import { StoryModal } from './story.js';
+import { NewSessionModal, StoriesModal, PresetModal } from './library.js';
 
 const html = htm.bind(h);
 const LS_KEY = 'genesis.lastSession';
@@ -22,6 +23,8 @@ export function App() {
   const [tools, setTools] = useState([]);
   const [chatModels, setChatModels] = useState([]);
   const [allTools, setAllTools] = useState([]);
+  const [stories, setStories] = useState([]);
+  const [editingStory, setEditingStory] = useState(null);
   const [toasts, setToasts] = useState([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -327,6 +330,116 @@ export function App() {
     }
   }, [pushToast]);
 
+  const loadStories = useCallback(async () => {
+    try {
+      const data = await api.stories();
+      const list = data.stories || [];
+      setStories(list);
+      return list;
+    } catch (err) {
+      return [];
+    }
+  }, []);
+
+  const openPreset = useCallback(async (id) => {
+    if (!id) {
+      setEditingStory(null);
+      setModal('preset');
+      return;
+    }
+    try {
+      setEditingStory(await api.story(id));
+      setModal('preset');
+    } catch (err) {
+      pushToast(err.message, 'error');
+    }
+  }, [pushToast]);
+
+  const startSession = useCallback(async (data) => {
+    try {
+      const created = await api.createSession(data);
+      setModal(null);
+      setSession(created);
+      setActivity([]);
+      setChoices([]);
+      setUsage(null);
+      setStatus(null);
+      localStorage.setItem(LS_KEY, created.id);
+      setSidebarOpen(false);
+      setPanelOpen(false);
+      await refreshSessions();
+      if (!created.messages || !created.messages.length) {
+        await runStream('/api/sessions/' + created.id + '/opening', {});
+      }
+    } catch (err) {
+      pushToast(err.message, 'error');
+    }
+  }, [pushToast, refreshSessions, runStream]);
+
+  const savePreset = useCallback(async (data) => {
+    try {
+      const picked = (data.characters || []).filter((c) => (c.name || '').trim());
+      const payload = {
+        title: data.title,
+        description: data.description,
+        genre: data.genre,
+        model: data.model,
+        opening: data.opening,
+        persona: data.persona,
+        characters: picked.map((c) => ({
+          id: c.id, name: c.name, description: c.description,
+          personality: c.personality, voice: c.voice || '',
+        })),
+        settings: data.settings,
+      };
+      let story = data.id ? await api.patchStory(data.id, payload) : await api.createStory(payload);
+
+      let changed = false;
+      let avatar = data.avatar || '';
+      if (data.avatarFile) {
+        const up = await api.uploadStoryAsset(story.id, data.avatarFile);
+        avatar = up.name;
+        changed = true;
+      }
+      const created = story.characters || [];
+      const withAvatars = [];
+      for (let i = 0; i < picked.length; i++) {
+        const src = picked[i];
+        const base = created[i] || {};
+        let cAvatar = src.avatar || '';
+        if (src.avatarFile) {
+          const up = await api.uploadStoryAsset(story.id, src.avatarFile);
+          cAvatar = up.name;
+          changed = true;
+        }
+        withAvatars.push({
+          id: base.id || src.id, name: src.name, description: src.description,
+          personality: src.personality, avatar: cAvatar, voice: src.voice || '',
+        });
+      }
+      if (changed) {
+        story = await api.patchStory(story.id, { avatar, characters: withAvatars });
+      }
+      setEditingStory(null);
+      setModal('stories');
+      await loadStories();
+      pushToast('Preset saved.');
+    } catch (err) {
+      pushToast(err.message, 'error');
+    }
+  }, [loadStories, pushToast]);
+
+  const deletePreset = useCallback(async (story) => {
+    if (!story) return;
+    if (!window.confirm('Delete preset "' + (story.title || '') + '"? Sessions already started from it are kept.')) return;
+    try {
+      await api.deleteStory(story.id);
+      await loadStories();
+    } catch (err) {
+      pushToast(err.message, 'error');
+    }
+  }, [loadStories, pushToast]);
+
   const loadSpeechModels = useCallback(async () => {
     try {
       const data = await api.speechModels();
@@ -487,6 +600,7 @@ export function App() {
       } catch (err) {
         setAllTools([]);
       }
+      await loadStories();
       const last = localStorage.getItem(LS_KEY);
       const target = last && list.some((s) => s.id === last) ? last : list[0] && list[0].id;
       if (target) await openSession(target);
@@ -524,7 +638,8 @@ export function App() {
         activeId=${session && session.id}
         open=${sidebarOpen}
         onOpen=${openSession}
-        onNew=${() => setModal('new')}
+        onNew=${() => setModal('new-session')}
+        onStories=${() => setModal('stories')}
         onSettings=${openSettings}
         onTools=${openTools}
       />
@@ -536,7 +651,7 @@ export function App() {
           onMenu=${() => setSidebarOpen((v) => !v)}
           onPanel=${() => setPanelOpen((v) => !v)}
         />
-        <${C.MessageList} session=${session} streaming=${streaming} onNewStory=${() => setModal('new')}
+        <${C.MessageList} session=${session} streaming=${streaming} onNewStory=${() => setModal('new-session')}
                               onSpeak=${speak} speakingId=${speaking} />
         <${C.StatusBar} status=${status && status.status} step=${status && status.step} />
         <${C.Choices} choices=${choices} onChoose=${ (text) => send(text, []) } />
@@ -562,9 +677,15 @@ export function App() {
         <${C.SettingsModal} config=${config} onClose=${() => setModal(null)} onSave=${saveConfig}
                             chatModels=${chatModels} onReloadModels=${reloadChatModels}
                             onLoadSpeechModels=${loadSpeechModels} tools=${allTools} />`}
-      ${modal === 'new' && html`
-        <${C.NewStoryModal} config=${config} onClose=${() => setModal(null)} onCreate=${createStory}
-                            chatModels=${chatModels} onLoadSpeechModels=${loadSpeechModels} tools=${allTools} />`}
+      ${modal === 'new-session' && html`
+        <${NewSessionModal} stories=${stories} onClose=${() => setModal(null)} onCreate=${startSession} />`}
+      ${modal === 'stories' && html`
+        <${StoriesModal} stories=${stories} onClose=${() => setModal(null)}
+                         onStart=${async (id) => { await loadStories(); await startSession({ storyId: id }); }}
+                         onEdit=${openPreset} onNew=${() => openPreset(null)} onDelete=${deletePreset} />`}
+      ${modal === 'preset' && html`
+        <${PresetModal} story=${editingStory} config=${config} chatModels=${chatModels}
+                        tools=${allTools} onClose=${() => setModal(null)} onSave=${savePreset} />`}
       ${modal === 'story' && session && html`
         <${StoryModal} session=${session} onClose=${() => setModal(null)} onSave=${saveStory}
                        chatModels=${chatModels} speechModel=${config && config.speechModel}

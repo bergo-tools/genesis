@@ -28,7 +28,9 @@ story 的 Story settings 里逐个开关。
 ## 特性
 
 - **一切皆工具调用**，只有 4 个工具：message / think / update_state / choices。
-- **多角色 cast**：一个 story 可配置任意多个角色，每个角色有名字、设定、性格与头像；
+- **Story 预设 + Session 会话**：Story 是可复用的预设（cast、开场、默认设置、种子状态），
+  每个 session 从预设开启并拥有独立对话；内置中世纪魔法预设「灰烬王冠 · Emberfall」。
+- **多角色 cast**：一个 story 可配置任意多个角色，每个角色有名字、设定、性格、头像与 TTS 音色；
   模型用 `message` 的 `speaker` 指定是谁在说话。
 - **图片**：story 头像、角色头像、聊天中发图都支持；聊天图片会以多模态（base64 data URL）
   一起发给模型，具备视觉能力的模型可以直接看到。
@@ -46,21 +48,33 @@ story 的 Story settings 里逐个开关。
 - **持久化**：story 以 JSON 原子写入；配置在 `config.json`（API key 可来自 `.env`）。
 - **可替换后端**：默认 OpenRouter；因为 SDK 讲 OpenAI 兼容协议，改 Base URL 即可接入任意兼容端点。
 
+## Story 与 Session
+
+- **Story = 预设**：可复用的模板，包含角色卡（cast）、开场白、默认生成设置、种子世界状态、
+  故事级指令，以及故事自己的头像/角色头像。内置了一个中世纪魔法主题预设
+  **「灰烬王冠 · Emberfall」**（3 个角色 + 开场 + 种子状态），首次启动自动写入。
+- **Session = 一次对话**：从某个 Story 预设开启。创建时会把预设的 cast、默认设置、
+  种子状态**快照**进这个 session（之后改预设不会影响已开始的对话），并拥有独立的
+  消息记录、世界状态与图片。每个 session 可再单独调模型/思考强度/工具/温度等。
+
 ## 存储布局
 
-每个 story 独占一个目录，方便清理：
+每个 session / preset 独占一个目录，方便清理：
 
 ```
 <dataDir>/
   config.json
-  stories/
+  stories/                   # 预设
     <story-id>/
-      story.json           # 角色卡、消息、世界状态、模型侧 history
-      assets/
-        <random>.png       # 头像与聊天图片
+      story.json             # cast、开场、默认设置、种子状态
+      assets/<random>.png    # 预设头像与角色头像
+  sessions/                  # 对话实例
+    <session-id>/
+      session.json           # 消息、世界状态、模型侧 history、生效设置
+      assets/<random>.png    # 聊天图片与合成语音
 ```
 
-删除某个 story 时服务端直接 `os.RemoveAll` 整个目录；上传文件名经过校验，禁止 `..` 与路径分隔符。
+删除某个 session 或 preset 时服务端直接 `os.RemoveAll` 整个目录；上传文件名经过校验，禁止 `..` 与路径分隔符。
 
 ## 目录结构
 
@@ -72,7 +86,7 @@ internal/store/              数据模型、按 story 分目录的持久化与�
 internal/agent/              工具注册表、事件、agent 循环、system prompt
 internal/tools/              message / think / update_state / choices
 internal/server/             HTTP 路由、NDJSON 流、图片上传/读取
-web/                         Preact + htm 前端（Vendor ESM，embed 进二进制）
+web/                         Preact + htm 前端（components / story / library / vendor）
 ```
 
 ## 快速开始
@@ -84,8 +98,8 @@ make build                  # 产物：dist/genesis
 ./dist/genesis -addr :9000 -data /var/lib/genesis
 ```
 
-在网页里 **Settings** 填 API key 与模型；**New story** 里可以加多个角色、上传故事/角色头像、
-选择思考强度与是否强制 choices。
+在网页里 **Settings** 填 API key 与模型；**Stories** 管理预设（含内置的「灰烬王冠」），
+**New session** 选一个预设即可开始对话；预设与单个 session 都能设置角色、头像、思考强度与工具开关。
 
 ### CLI 参数
 
@@ -153,7 +167,10 @@ func weatherTool() *agent.Tool {
 | `GET/PUT /api/config` | 读取（key 脱敏）/ 保存配置 |
 | `GET /api/models` | 代理拉取文本模型列表（含 `tools` 标记，支持工具调用的排前面） |
 | `GET /api/tools` | 列出已注册工具及 schema |
-| `GET /api/sessions` | story 列表 |
+| `GET /api/stories` / `POST /api/stories` | Story 预设列表 / 新建预设 |
+| `GET/PATCH/DELETE /api/stories/{id}` | 读取 / 更新 / 删除预设（含 cast、开场、默认设置、种子状态） |
+| `POST /api/stories/{id}/assets` · `GET .../assets/{name}` | 预设图片上传 / 读取 |
+| `GET /api/sessions` | session 列表 |
 | `POST /api/sessions` | 新建（persona、characters[]、greeting、settings） |
 | `GET/PATCH/DELETE /api/sessions/{id}` | 读取 / 更新（角色、头像、标题）/ 删除整个目录 |
 | `POST /api/sessions/{id}/messages` | 发送消息（`{text, images: [资源名]}`），返回 NDJSON |

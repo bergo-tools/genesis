@@ -24,14 +24,15 @@ import (
 type Server struct {
 	cfg      *config.Store
 	store    *store.Store
+	stories  *store.StoryStore
 	registry *agent.Registry
 	agent    *agent.Agent
 	assets   http.Handler
 }
 
 // New constructs a Server.
-func New(cfg *config.Store, st *store.Store, reg *agent.Registry) *Server {
-	s := &Server{cfg: cfg, store: st, registry: reg}
+func New(cfg *config.Store, st *store.Store, stories *store.StoryStore, reg *agent.Registry) *Server {
+	s := &Server{cfg: cfg, store: st, stories: stories, registry: reg}
 	s.agent = agent.New(st, reg, s.newClient, s.agentConfig)
 	sub, err := fs.Sub(web.Files, ".")
 	if err != nil {
@@ -71,6 +72,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/config", s.handlePutConfig)
 	mux.HandleFunc("GET /api/models", s.handleModels)
 	mux.HandleFunc("GET /api/tools", s.handleTools)
+	mux.HandleFunc("GET /api/stories", s.handleListStories)
+	mux.HandleFunc("POST /api/stories", s.handleCreateStory)
+	mux.HandleFunc("GET /api/stories/{id}", s.handleGetStory)
+	mux.HandleFunc("PATCH /api/stories/{id}", s.handlePatchStory)
+	mux.HandleFunc("DELETE /api/stories/{id}", s.handleDeleteStory)
+	mux.HandleFunc("POST /api/stories/{id}/assets", s.handleStoryAssetUpload)
+	mux.HandleFunc("GET /api/stories/{id}/assets/{name}", s.handleStoryAssetGet)
 	mux.HandleFunc("GET /api/sessions", s.handleListSessions)
 	mux.HandleFunc("POST /api/sessions", s.handleCreateSession)
 	mux.HandleFunc("GET /api/sessions/{id}", s.handleGetSession)

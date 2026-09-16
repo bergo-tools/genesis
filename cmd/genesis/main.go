@@ -59,15 +59,22 @@ func main() {
 	}
 
 	c := cfg.Get()
-	sessions, err := store.New(filepath.Join(c.DataDir, "stories"))
+	sessions, err := store.New(filepath.Join(c.DataDir, "sessions"))
 	if err != nil {
-		log.Fatalf("store: %v", err)
+		log.Fatalf("sessions: %v", err)
+	}
+	stories, err := store.NewStoryStore(filepath.Join(c.DataDir, "stories"))
+	if err != nil {
+		log.Fatalf("stories: %v", err)
+	}
+	if err := store.EnsureBuiltins(stories); err != nil {
+		log.Fatalf("builtin stories: %v", err)
 	}
 
 	reg := agent.NewRegistry()
 	tools.RegisterBuiltins(reg)
 
-	srv := server.New(cfg, sessions, reg)
+	srv := server.New(cfg, sessions, stories, reg)
 	httpSrv := &http.Server{
 		Addr:              c.Addr,
 		Handler:           srv.Handler(),
@@ -84,6 +91,7 @@ func main() {
 	log.Printf("  model     : %s", c.Model)
 	log.Printf("  api key   : %s", keyState(c.APIKey))
 	log.Printf("  sessions  : %s", sessions.Dir())
+	log.Printf("  stories   : %s", stories.Dir())
 	log.Printf("  config    : %s", cp)
 
 	if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {

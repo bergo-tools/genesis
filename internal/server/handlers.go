@@ -316,6 +316,8 @@ func (s *Server) handleListSessions(w http.ResponseWriter, _ *http.Request) {
 	for _, sess := range sessions {
 		out = append(out, map[string]any{
 			"id":           sess.ID,
+			"storyId":      sess.StoryID,
+			"storyTitle":   sess.StoryTitle,
 			"title":        sessionTitle(sess),
 			"avatar":       sess.Avatar,
 			"model":        sess.Model,
@@ -330,6 +332,7 @@ func (s *Server) handleListSessions(w http.ResponseWriter, _ *http.Request) {
 
 func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 	var body struct {
+		StoryID    string           `json:"storyId"`
 		Title      string           `json:"title"`
 		Avatar     string           `json:"avatar"`
 		Model      string           `json:"model"`
@@ -342,21 +345,37 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	cfg := s.cfg.Get()
 	sess := &store.Session{
-		Title:  strings.TrimSpace(body.Title),
-		Avatar: strings.TrimSpace(body.Avatar),
-		Model:  strings.TrimSpace(body.Model),
-		Settings: store.Settings{
-			Temperature:     cfg.Temperature,
-			MaxTokens:       cfg.MaxTokens,
-			MaxSteps:        cfg.MaxSteps,
-			ToolChoice:      cfg.ToolChoice,
-			ReasoningEffort: cfg.ReasoningEffort,
-			ChoicesEnabled:  cfg.ChoicesEnabled,
-			DisabledTools:   cfg.DisabledTools,
-		},
-		State: map[string]any{},
+		Title:    strings.TrimSpace(body.Title),
+		Avatar:   strings.TrimSpace(body.Avatar),
+		Model:    strings.TrimSpace(body.Model),
+		Settings: defaultSettings(s.cfg.Get()),
+		State:    map[string]any{},
+	}
+	opening := strings.TrimSpace(body.Greeting)
+
+	if storyID := strings.TrimSpace(body.StoryID); storyID != "" {
+		st, err := s.stories.Get(storyID)
+		if err != nil {
+			writeError(w, statusFor(err), err)
+			return
+		}
+		sess.StoryID = st.ID
+		sess.StoryTitle = st.Title
+		sess.Avatar = st.Avatar
+		if strings.TrimSpace(sess.Model) == "" {
+			sess.Model = st.Model
+		}
+		sess.Persona = st.Persona
+		sess.Settings = st.Settings
+		sess.Characters = cloneCharacters(st.Characters)
+		sess.State = cloneState(st.State)
+		if sess.Title == "" {
+			sess.Title = st.Title
+		}
+		if opening == "" {
+			opening = strings.TrimSpace(st.Opening)
+		}
 	}
 	if body.Persona != nil {
 		sess.Persona = *body.Persona
@@ -366,18 +385,21 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 			sess.Characters = append(sess.Characters, c)
 		}
 	}
+	if body.Avatar != "" {
+		sess.Avatar = strings.TrimSpace(body.Avatar)
+	}
 	applySettings(&sess.Settings, body.Settings)
 
-	if g := strings.TrimSpace(body.Greeting); g != "" {
+	if opening != "" {
 		speaker := "Narrator"
 		if len(sess.Characters) > 0 {
 			speaker = sess.Characters[0].Name
 		}
 		sess.Messages = append(sess.Messages, &store.Message{
-			ID: store.NewID(), Role: "assistant", Kind: store.KindSpeech,
-			Speaker: speaker, Text: g, CreatedAt: time.Now().UTC(),
+			ID: store.NewID(), Role: "assistant", Kind: store.KindNarration,
+			Speaker: speaker, Text: opening, CreatedAt: time.Now().UTC(),
 		})
-		sess.History = append(sess.History, llm.Message{Role: llm.RoleAssistant, Content: g})
+		sess.History = append(sess.History, llm.Message{Role: llm.RoleAssistant, Content: opening})
 	}
 
 	if err := s.store.Create(sess); err != nil {
@@ -687,6 +709,47 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func defaultSettings(cfg config.Config) store.Settings {
+	return store.Settings{
+		Temperature:     cfg.Temperature,
+		MaxTokens:       cfg.MaxTokens,
+		MaxSteps:        cfg.MaxSteps,
+		ToolChoice:      cfg.ToolChoice,
+		ReasoningEffort: cfg.ReasoningEffort,
+		ChoicesEnabled:  cfg.ChoicesEnabled,
+		DisabledTools:   cfg.DisabledTools,
+	}
+}
+
+// cloneCharacters snapshots a preset cast so a session is independent of it.
+func cloneCharacters(in []*store.Character) []*store.Character {
+	out := make([]*store.Character, 0, len(in))
+	for _, c := range in {
+		if c == nil {
+			continue
+		}
+		cp := *c
+		out = append(out, &cp)
+	}
+	return out
+}
+
+// cloneState deep-copies a preset's seed world state.
+func cloneState(in map[string]any) map[string]any {
+	if len(in) == 0 {
+		return map[string]any{}
+	}
+	b, err := json.Marshal(in)
+	if err != nil {
+		return map[string]any{}
+	}
+	var out map[string]any
+	if err := json.Unmarshal(b, &out); err != nil {
+		return map[string]any{}
+	}
+	return out
 }
 
 func statusFor(err error) int {

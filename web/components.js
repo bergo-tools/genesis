@@ -190,7 +190,7 @@ export function Composer({ streaming, disabled, uploading, hasChoices, canReroll
     </footer>`;
 }
 
-export function Sidebar({ sessions, activeId, open, onOpen, onNew, onSettings, onTools }) {
+export function Sidebar({ sessions, activeId, open, onOpen, onNew, onSettings, onTools, onStories }) {
   return html`
     <aside class=${'sidebar' + (open ? ' open' : '')} aria-label="Stories">
       <div class="sidebar-head">
@@ -208,6 +208,7 @@ export function Sidebar({ sessions, activeId, open, onOpen, onNew, onSettings, o
           </button>`)}
       </nav>
       <div class="sidebar-foot">
+        <button class="btn btn-ghost btn-sm" type="button" onClick=${onStories}>Stories</button>
         <button class="btn btn-ghost btn-sm" type="button" onClick=${onTools}>Tools</button>
         <button class="btn btn-ghost btn-sm" type="button" onClick=${onSettings}>Settings</button>
       </div>
@@ -216,6 +217,7 @@ export function Sidebar({ sessions, activeId, open, onOpen, onNew, onSettings, o
 
 export function Topbar({ session, usage, onMenu, onPanel }) {
   const bits = [];
+  if (session && session.storyTitle) bits.push(session.storyTitle);
   if (session && session.model) bits.push(session.model);
   if (session && session.characters && session.characters.length) bits.push(session.characters.map((c) => c.name).join(', '));
   if (usage && usage.totalTokens) bits.push(usage.totalTokens + ' tok');

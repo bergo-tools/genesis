@@ -9,9 +9,13 @@ import (
 	"github.com/zp/genesis/internal/llm"
 )
 
-// Session is a single story: its cast, its world state and its transcript.
+// Session is one conversation: the cast and defaults snapshotted from a
+// story preset, plus this playthrough's transcript and world state.
 type Session struct {
-	ID         string         `json:"id"`
+	ID string `json:"id"`
+	// StoryID is the preset this conversation was started from.
+	StoryID    string         `json:"storyId,omitempty"`
+	StoryTitle string         `json:"storyTitle,omitempty"`
 	Title      string         `json:"title"`
 	Avatar     string         `json:"avatar,omitempty"`
 	CreatedAt  time.Time      `json:"createdAt"`
@@ -29,7 +33,26 @@ type Session struct {
 	History []llm.Message `json:"history,omitempty"`
 }
 
-// Settings holds per-story generation options.
+// Story is a reusable preset: a cast, an opening, and default settings.
+// Sessions are started from a story and snapshot its cast and defaults.
+type Story struct {
+	ID          string         `json:"id"`
+	Title       string         `json:"title"`
+	Avatar      string         `json:"avatar,omitempty"`
+	Description string         `json:"description,omitempty"`
+	Genre       string         `json:"genre,omitempty"`
+	Model       string         `json:"model,omitempty"`
+	Opening     string         `json:"opening,omitempty"`
+	Persona     Persona        `json:"persona,omitempty"`
+	Characters  []*Character   `json:"characters"`
+	Settings    Settings       `json:"settings"`
+	State       map[string]any `json:"state,omitempty"`
+	Builtin     bool           `json:"builtin,omitempty"`
+	CreatedAt   time.Time      `json:"createdAt"`
+	UpdatedAt   time.Time      `json:"updatedAt"`
+}
+
+// Settings holds generation options, shared by stories and sessions.
 type Settings struct {
 	Temperature     float64 `json:"temperature"`
 	MaxTokens       int     `json:"maxTokens"`

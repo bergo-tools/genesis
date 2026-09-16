@@ -19,15 +19,27 @@ export function assetURL(sessionId, name) {
   return '/api/sessions/' + encodeURIComponent(sessionId) + '/assets/' + encodeURIComponent(name);
 }
 
-// uploadAsset posts a File to a story and resolves to { name, url }.
-export async function uploadAsset(sessionId, file) {
+// storyAssetURL builds the browser URL for a preset asset.
+export function storyAssetURL(storyId, name) {
+  if (!storyId || !name) return '';
+  return '/api/stories/' + encodeURIComponent(storyId) + '/assets/' + encodeURIComponent(name);
+}
+
+async function uploadTo(base, id, file) {
   const form = new FormData();
   form.append('file', file, file.name || 'upload');
-  const res = await fetch('/api/sessions/' + encodeURIComponent(sessionId) + '/assets', {
-    method: 'POST',
-    body: form,
-  });
+  const res = await fetch(base + '/' + encodeURIComponent(id) + '/assets', { method: 'POST', body: form });
   return toJSON(res);
+}
+
+// uploadAsset posts a File to a session and resolves to { name, url }.
+export function uploadAsset(sessionId, file) {
+  return uploadTo('/api/sessions', sessionId, file);
+}
+
+// uploadStoryAsset posts a File to a preset.
+export function uploadStoryAsset(storyId, file) {
+  return uploadTo('/api/stories', storyId, file);
 }
 
 export const api = {
@@ -36,6 +48,12 @@ export const api = {
   models: () => fetch('/api/models').then(toJSON),
   tools: () => fetch('/api/tools').then(toJSON),
   speechModels: () => fetch('/api/speech/models').then(toJSON),
+  stories: () => fetch('/api/stories').then(toJSON),
+  story: (id) => fetch('/api/stories/' + encodeURIComponent(id)).then(toJSON),
+  createStory: (body) => fetch('/api/stories', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(body) }).then(toJSON),
+  patchStory: (id, body) => fetch('/api/stories/' + encodeURIComponent(id), { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(body) }).then(toJSON),
+  deleteStory: (id) => fetch('/api/stories/' + encodeURIComponent(id), { method: 'DELETE' }).then(toJSON),
+  uploadStoryAsset,
   sessions: () => fetch('/api/sessions').then(toJSON),
   createSession: (body) => fetch('/api/sessions', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(body) }).then(toJSON),
   session: (id) => fetch('/api/sessions/' + encodeURIComponent(id)).then(toJSON),

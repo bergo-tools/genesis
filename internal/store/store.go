@@ -1,8 +1,9 @@
-// Package store persists stories to disk. Every story lives in its own
-// directory so it can be listed, backed up or deleted as a unit:
+// Package store persists presets (stories) and their conversation instances
+// (sessions) to disk. Each record lives in its own directory so it can be
+// listed, backed up or deleted as a unit:
 //
-//	<root>/<story-id>/story.json
-//	<root>/<story-id>/assets/<file>
+//	<dataDir>/stories/<story-id>/story.json + assets/
+//	<dataDir>/sessions/<session-id>/session.json + assets/
 package store
 
 import (
@@ -18,41 +19,14 @@ import (
 	"time"
 )
 
-// ErrNotFound is returned when a story (or asset) does not exist.
-var ErrNotFound = errors.New("story not found")
+// ErrNotFound is returned when a record (or asset) does not exist.
+var ErrNotFound = errors.New("not found")
 
 // MaxAssetBytes caps a single uploaded image.
 const MaxAssetBytes = 10 << 20
 
 var allowedAssetExt = map[string]bool{
 	".png": true, ".jpg": true, ".jpeg": true, ".gif": true, ".webp": true,
-}
-
-// Store is a directory-backed story repository.
-type Store struct {
-	dir   string
-	mu    sync.RWMutex
-	locks sync.Map // story id -> *sync.Mutex
-}
-
-// New creates the stories root directory if needed.
-func New(dir string) (*Store, error) {
-	if strings.TrimSpace(dir) == "" {
-		dir = "stories"
-	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return nil, err
-	}
-	return &Store{dir: dir}, nil
-}
-
-// Dir returns the stories root directory.
-func (s *Store) Dir() string { return s.dir }
-
-// TurnLock returns a per-story mutex used to serialize agent turns.
-func (s *Store) TurnLock(id string) *sync.Mutex {
-	v, _ := s.locks.LoadOrStore(id, &sync.Mutex{})
-	return v.(*sync.Mutex)
 }
 
 func validID(id string) bool {
@@ -83,31 +57,202 @@ func validAssetName(name string) bool {
 	return true
 }
 
-func (s *Store) storyDir(id string) string { return filepath.Join(s.dir, id) }
-func (s *Store) path(id string) string     { return filepath.Join(s.storyDir(id), "story.json") }
-func (s *Store) assetsDir(id string) string {
-	return filepath.Join(s.storyDir(id), "assets")
+// repo is a directory-per-record collection.
+type repo struct {
+	root     string
+	fileName string
+	mu       sync.RWMutex
+	locks    sync.Map
 }
 
-// List returns every story, most recently updated first.
-func (s *Store) List() ([]*Session, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	entries, err := os.ReadDir(s.dir)
+func newRepo(root, fileName string) (*repo, error) {
+	if strings.TrimSpace(root) == "" {
+		return nil, errors.New("store: empty root")
+	}
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		return nil, err
+	}
+	return &repo{root: root, fileName: fileName}, nil
+}
+
+func (r *repo) recordDir(id string) string  { return filepath.Join(r.root, id) }
+func (r *repo) recordPath(id string) string { return filepath.Join(r.recordDir(id), r.fileName) }
+func (r *repo) assetsDir(id string) string  { return filepath.Join(r.recordDir(id), "assets") }
+
+func (r *repo) turnLock(id string) *sync.Mutex {
+	v, _ := r.locks.LoadOrStore(id, &sync.Mutex{})
+	return v.(*sync.Mutex)
+}
+
+func (r *repo) save(id string, v any) error {
+	if !validID(id) {
+		return errors.New("store: invalid id")
+	}
+	b, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if err := os.MkdirAll(r.assetsDir(id), 0o755); err != nil {
+		return err
+	}
+	tmp := r.recordPath(id) + ".tmp"
+	if err := os.WriteFile(tmp, append(b, '\n'), 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, r.recordPath(id))
+}
+
+func (r *repo) load(id string, v any) error {
+	if !validID(id) {
+		return ErrNotFound
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	b, err := os.ReadFile(r.recordPath(id))
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return ErrNotFound
+		}
+		return err
+	}
+	if err := json.Unmarshal(b, v); err != nil {
+		return fmt.Errorf("parse %s: %w", id, err)
+	}
+	return nil
+}
+
+func (r *repo) ids() ([]string, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	entries, err := os.ReadDir(r.root)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]*Session, 0, len(entries))
+	out := make([]string, 0, len(entries))
 	for _, e := range entries {
-		if !e.IsDir() || !validID(e.Name()) {
-			continue
+		if e.IsDir() && validID(e.Name()) {
+			out = append(out, e.Name())
 		}
-		b, err := os.ReadFile(s.path(e.Name()))
-		if err != nil {
-			continue
+	}
+	return out, nil
+}
+
+func (r *repo) remove(id string) error {
+	if !validID(id) {
+		return ErrNotFound
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, err := os.Stat(r.recordDir(id)); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return ErrNotFound
 		}
+		return err
+	}
+	return os.RemoveAll(r.recordDir(id))
+}
+
+func (r *repo) assetPath(id, name string) (string, error) {
+	if !validID(id) || !validAssetName(name) {
+		return "", ErrNotFound
+	}
+	return filepath.Join(r.assetsDir(id), name), nil
+}
+
+func (r *repo) openAsset(id, name string) (io.ReadCloser, error) {
+	p, err := r.assetPath(id, name)
+	if err != nil {
+		return nil, err
+	}
+	f, err := os.Open(p)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	return f, nil
+}
+
+func (r *repo) assetExists(id, name string) bool {
+	p, err := r.assetPath(id, name)
+	if err != nil {
+		return false
+	}
+	_, statErr := os.Stat(p)
+	return statErr == nil
+}
+
+func (r *repo) writeAsset(id, name string, data []byte) error {
+	p, err := r.assetPath(id, name)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(r.assetsDir(id), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(p, data, 0o644)
+}
+
+func (r *repo) saveUpload(id string, rd io.Reader, ext string) (string, error) {
+	if !validID(id) {
+		return "", ErrNotFound
+	}
+	ext = strings.ToLower(strings.TrimSpace(ext))
+	if !allowedAssetExt[ext] {
+		return "", fmt.Errorf("unsupported image type %q", ext)
+	}
+	data, err := io.ReadAll(io.LimitReader(rd, MaxAssetBytes+1))
+	if err != nil {
+		return "", err
+	}
+	if len(data) == 0 {
+		return "", errors.New("empty upload")
+	}
+	if len(data) > MaxAssetBytes {
+		return "", fmt.Errorf("image too large (max %d MB)", MaxAssetBytes>>20)
+	}
+	name := NewID() + ext
+	if err := r.writeAsset(id, name, data); err != nil {
+		return "", err
+	}
+	return name, nil
+}
+
+// ---------------------------------------------------------------- sessions
+
+// Store is the session (conversation) repository.
+type Store struct {
+	repo *repo
+}
+
+// New opens the session repository rooted at dir.
+func New(dir string) (*Store, error) {
+	r, err := newRepo(dir, "session.json")
+	if err != nil {
+		return nil, err
+	}
+	return &Store{repo: r}, nil
+}
+
+// Dir returns the sessions root directory.
+func (s *Store) Dir() string { return s.repo.root }
+
+// TurnLock serializes agent turns per session.
+func (s *Store) TurnLock(id string) *sync.Mutex { return s.repo.turnLock(id) }
+
+// List returns every session, most recently updated first.
+func (s *Store) List() ([]*Session, error) {
+	ids, err := s.repo.ids()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*Session, 0, len(ids))
+	for _, id := range ids {
 		var sess Session
-		if err := json.Unmarshal(b, &sess); err != nil {
+		if err := s.repo.load(id, &sess); err != nil {
 			continue
 		}
 		out = append(out, &sess)
@@ -116,23 +261,11 @@ func (s *Store) List() ([]*Session, error) {
 	return out, nil
 }
 
-// Get loads one story by id.
+// Get loads one session by id.
 func (s *Store) Get(id string) (*Session, error) {
-	if !validID(id) {
-		return nil, ErrNotFound
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	b, err := os.ReadFile(s.path(id))
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil, ErrNotFound
-		}
-		return nil, err
-	}
 	var sess Session
-	if err := json.Unmarshal(b, &sess); err != nil {
-		return nil, fmt.Errorf("parse story %s: %w", id, err)
+	if err := s.repo.load(id, &sess); err != nil {
+		return nil, err
 	}
 	if sess.State == nil {
 		sess.State = map[string]any{}
@@ -140,7 +273,7 @@ func (s *Store) Get(id string) (*Session, error) {
 	return &sess, nil
 }
 
-// Create assigns an id and saves a new story.
+// Create assigns an id and saves a new session.
 func (s *Store) Create(sess *Session) error {
 	if sess == nil {
 		return errors.New("store: nil session")
@@ -156,123 +289,135 @@ func (s *Store) Create(sess *Session) error {
 	if sess.State == nil {
 		sess.State = map[string]any{}
 	}
-	return s.Save(sess)
+	return s.repo.save(sess.ID, sess)
 }
 
-// Save writes story.json atomically, creating the story directory if needed.
+// Save writes a session.
 func (s *Store) Save(sess *Session) error {
-	if sess == nil || !validID(sess.ID) {
-		return errors.New("store: invalid story id")
+	if sess == nil {
+		return errors.New("store: nil session")
 	}
 	sess.UpdatedAt = time.Now().UTC()
 	if sess.State == nil {
 		sess.State = map[string]any{}
 	}
-	b, err := json.MarshalIndent(sess, "", "  ")
-	if err != nil {
-		return err
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if err := os.MkdirAll(s.assetsDir(sess.ID), 0o755); err != nil {
-		return err
-	}
-	tmp := s.path(sess.ID) + ".tmp"
-	if err := os.WriteFile(tmp, append(b, '\n'), 0o644); err != nil {
-		return err
-	}
-	return os.Rename(tmp, s.path(sess.ID))
+	return s.repo.save(sess.ID, sess)
 }
 
-// Delete removes the whole story directory.
-func (s *Store) Delete(id string) error {
-	if !validID(id) {
-		return ErrNotFound
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if _, err := os.Stat(s.storyDir(id)); err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return ErrNotFound
-		}
-		return err
-	}
-	return os.RemoveAll(s.storyDir(id))
+// Delete removes a session and all of its assets.
+func (s *Store) Delete(id string) error { return s.repo.remove(id) }
+
+// SaveAsset stores an uploaded image inside the session directory.
+func (s *Store) SaveAsset(id string, rd io.Reader, ext string) (string, error) {
+	return s.repo.saveUpload(id, rd, ext)
 }
 
-// SaveAsset stores an uploaded image inside the story directory and returns
-// the generated file name.
-func (s *Store) SaveAsset(id string, r io.Reader, ext string) (string, error) {
-	if !validID(id) {
-		return "", ErrNotFound
-	}
-	ext = strings.ToLower(strings.TrimSpace(ext))
-	if !allowedAssetExt[ext] {
-		return "", fmt.Errorf("unsupported image type %q", ext)
-	}
-	data, err := io.ReadAll(io.LimitReader(r, MaxAssetBytes+1))
-	if err != nil {
-		return "", err
-	}
-	if len(data) == 0 {
-		return "", errors.New("empty upload")
-	}
-	if len(data) > MaxAssetBytes {
-		return "", fmt.Errorf("image too large (max %d MB)", MaxAssetBytes>>20)
-	}
-	name := NewID() + ext
-	dir := s.assetsDir(id)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", err
-	}
-	if err := os.WriteFile(filepath.Join(dir, name), data, 0o644); err != nil {
-		return "", err
-	}
-	return name, nil
-}
+// AssetPath returns the on-disk path of a session asset.
+func (s *Store) AssetPath(id, name string) (string, error) { return s.repo.assetPath(id, name) }
 
-// AssetPath returns the on-disk path of an asset, validating traversal.
-func (s *Store) AssetPath(id, name string) (string, error) {
-	if !validID(id) || !validAssetName(name) {
-		return "", ErrNotFound
-	}
-	return filepath.Join(s.assetsDir(id), name), nil
-}
+// OpenAsset opens a session asset.
+func (s *Store) OpenAsset(id, name string) (io.ReadCloser, error) { return s.repo.openAsset(id, name) }
 
-// WriteAsset stores bytes under an explicit, validated name. It is used for
-// generated media such as text-to-speech audio.
+// AssetExists reports whether a session asset exists.
+func (s *Store) AssetExists(id, name string) bool { return s.repo.assetExists(id, name) }
+
+// WriteAsset stores bytes under an explicit name.
 func (s *Store) WriteAsset(id, name string, data []byte) error {
-	if !validID(id) || !validAssetName(name) {
-		return ErrNotFound
-	}
-	dir := s.assetsDir(id)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
-	}
-	return os.WriteFile(filepath.Join(dir, name), data, 0o644)
+	return s.repo.writeAsset(id, name, data)
 }
 
-// AssetExists reports whether an asset file is present.
-func (s *Store) AssetExists(id, name string) bool {
-	if !validID(id) || !validAssetName(name) {
-		return false
-	}
-	_, err := os.Stat(filepath.Join(s.assetsDir(id), name))
-	return err == nil
+// ----------------------------------------------------------------- stories
+
+// StoryStore is the story (preset) repository.
+type StoryStore struct {
+	repo *repo
 }
 
-// OpenAsset opens an asset for reading.
-func (s *Store) OpenAsset(id, name string) (io.ReadCloser, error) {
-	p, err := s.AssetPath(id, name)
+// NewStoryStore opens the preset repository rooted at dir.
+func NewStoryStore(dir string) (*StoryStore, error) {
+	r, err := newRepo(dir, "story.json")
 	if err != nil {
 		return nil, err
 	}
-	f, err := os.Open(p)
+	return &StoryStore{repo: r}, nil
+}
+
+// Dir returns the presets root directory.
+func (s *StoryStore) Dir() string { return s.repo.root }
+
+// List returns every preset, most recently updated first.
+func (s *StoryStore) List() ([]*Story, error) {
+	ids, err := s.repo.ids()
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil, ErrNotFound
+		return nil, err
+	}
+	out := make([]*Story, 0, len(ids))
+	for _, id := range ids {
+		var st Story
+		if err := s.repo.load(id, &st); err != nil {
+			continue
 		}
+		out = append(out, &st)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].UpdatedAt.After(out[j].UpdatedAt) })
+	return out, nil
+}
+
+// Get loads one preset by id.
+func (s *StoryStore) Get(id string) (*Story, error) {
+	var st Story
+	if err := s.repo.load(id, &st); err != nil {
 		return nil, err
 	}
-	return f, nil
+	if st.State == nil {
+		st.State = map[string]any{}
+	}
+	return &st, nil
+}
+
+// Create assigns an id and saves a new preset.
+func (s *StoryStore) Create(st *Story) error {
+	if st == nil {
+		return errors.New("store: nil story")
+	}
+	if st.ID == "" {
+		st.ID = NewID()
+	}
+	now := time.Now().UTC()
+	if st.CreatedAt.IsZero() {
+		st.CreatedAt = now
+	}
+	st.UpdatedAt = now
+	if st.State == nil {
+		st.State = map[string]any{}
+	}
+	return s.repo.save(st.ID, st)
+}
+
+// Save writes a preset.
+func (s *StoryStore) Save(st *Story) error {
+	if st == nil {
+		return errors.New("store: nil story")
+	}
+	st.UpdatedAt = time.Now().UTC()
+	if st.State == nil {
+		st.State = map[string]any{}
+	}
+	return s.repo.save(st.ID, st)
+}
+
+// Delete removes a preset and all of its assets.
+func (s *StoryStore) Delete(id string) error { return s.repo.remove(id) }
+
+// SaveAsset stores an uploaded image inside the preset directory.
+func (s *StoryStore) SaveAsset(id string, rd io.Reader, ext string) (string, error) {
+	return s.repo.saveUpload(id, rd, ext)
+}
+
+// AssetPath returns the on-disk path of a preset asset.
+func (s *StoryStore) AssetPath(id, name string) (string, error) { return s.repo.assetPath(id, name) }
+
+// OpenAsset opens a preset asset.
+func (s *StoryStore) OpenAsset(id, name string) (io.ReadCloser, error) {
+	return s.repo.openAsset(id, name)
 }

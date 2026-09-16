@@ -1,11 +1,12 @@
-// Headless smoke test: render the Preact tree and the modals to strings.
+// Headless smoke test: render the Preact tree and every modal to strings.
 // Effects do not run, so this validates components and htm templates without a
 // browser or any npm install.
 import renderToString from './render-to-string.module.js';
 import { h } from '../vendor/preact.module.js';
 import { App } from '../app.js';
-import { SettingsModal, NewStoryModal } from '../components.js';
+import { SettingsModal } from '../components.js';
 import { StoryModal } from '../story.js';
+import { NewSessionModal, StoriesModal, PresetModal } from '../library.js';
 
 function check(name, out, needles) {
   const missing = needles.filter((needle) => !out.includes(needle));
@@ -23,14 +24,23 @@ const tools = [
   { name: 'choices', description: 'end turn', terminal: true, query: false },
 ];
 const chatModels = [{ id: 'deepseek/deepseek-chat', name: 'DeepSeek', tools: true, context: 163840, maxOutput: 16000 }];
+const stories = [
+  { id: 'emberfall', title: 'Emberfall', description: 'dark fantasy', genre: 'fantasy', characterCount: 3, builtin: true },
+  { id: 'custom1', title: 'Custom', description: 'mine', characterCount: 1 },
+];
+const session = { id: 's1', storyTitle: 'Emberfall', characters: [], settings: {} };
 
 const app = renderToString(h(App, {}));
 const settings = renderToString(h(SettingsModal, { config: {}, tools, chatModels, disabledTools: [] }));
-const newStory = renderToString(h(NewStoryModal, { config: {}, tools, chatModels, disabledTools: [] }));
-const story = renderToString(h(StoryModal, { session: { id: 's1', characters: [], settings: {} }, tools, chatModels, disabledTools: [] }));
+const sessionSettings = renderToString(h(StoryModal, { session, tools, chatModels, disabledTools: [] }));
+const newSession = renderToString(h(NewSessionModal, { stories }));
+const storiesModal = renderToString(h(StoriesModal, { stories }));
+const preset = renderToString(h(PresetModal, { story: null, config: {}, tools, chatModels }));
 
 const total = check('App', app, ['Genesis', 'Begin a story', 'What do you do?', 'agentic roleplay'])
   + check('SettingsModal', settings, ['tool-toggles', 'toggle-row', 'chat-model-options', 'speech-model-options', '<select'])
-  + check('NewStoryModal', newStory, ['tool-toggles', 'new-story-model-options', 'tool-toggles'])
-  + check('StoryModal', story, ['tool-toggles', 'story-model-options', '<select']);
-console.log('web SSR smoke test OK (' + total + ' chars across 4 renders)');
+  + check('StoryModal', sessionSettings, ['tool-toggles', 'story-model-options', '<select'])
+  + check('NewSessionModal', newSession, ['preset-card', 'New session', 'Emberfall'])
+  + check('StoriesModal', storiesModal, ['preset-list', 'preset-row', 'New preset', 'Start'])
+  + check('PresetModal', preset, ['tool-toggles', 'preset-model-options', '<select']);
+console.log('web SSR smoke test OK (' + total + ' chars across 6 renders)');

@@ -50,8 +50,8 @@ func TestStoryLivesInItsOwnDirectory(t *testing.T) {
 	if err := st.Create(&Session{ID: "s1", Title: "T"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(root, "s1", "story.json")); err != nil {
-		t.Fatalf("story.json should live under its own directory: %v", err)
+	if _, err := os.Stat(filepath.Join(root, "s1", "session.json")); err != nil {
+		t.Fatalf("session.json should live under its own directory: %v", err)
 	}
 	name, err := st.SaveAsset("s1", strings.NewReader("fake-png-bytes"), ".png")
 	if err != nil {
@@ -80,5 +80,64 @@ func TestPathTraversalRejected(t *testing.T) {
 	}
 	if _, err := st.OpenAsset("s1", "../story.json"); err == nil {
 		t.Fatal("expected traversal asset name to be rejected")
+	}
+}
+
+func TestStoryStoreIsSeparateFromSessions(t *testing.T) {
+	root := t.TempDir()
+	stories, err := NewStoryStore(filepath.Join(root, "stories"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sessions, err := New(filepath.Join(root, "sessions"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := stories.Create(&Story{
+		ID:         "preset1",
+		Title:      "Emberfall",
+		Characters: []*Character{{ID: "c1", Name: "Ilyra"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "stories", "preset1", "story.json")); err != nil {
+		t.Fatalf("story.json missing: %v", err)
+	}
+	if _, err := sessions.Get("preset1"); err != ErrNotFound {
+		t.Fatalf("preset must not appear as a session: %v", err)
+	}
+	got, err := stories.Get("preset1")
+	if err != nil || got.Title != "Emberfall" {
+		t.Fatalf("get story: %v %+v", err, got)
+	}
+	if err := stories.Delete("preset1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := stories.Get("preset1"); err != ErrNotFound {
+		t.Fatal("expected the preset to be gone")
+	}
+}
+
+func TestBuiltinStorySeededOnce(t *testing.T) {
+	stories, err := NewStoryStore(filepath.Join(t.TempDir(), "stories"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := EnsureBuiltins(stories); err != nil {
+		t.Fatal(err)
+	}
+	st, err := stories.Get("emberfall")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !st.Builtin || st.Title == "" || len(st.Characters) < 2 || st.Opening == "" {
+		t.Fatalf("unexpected builtin preset: %+v", st)
+	}
+	if err := EnsureBuiltins(stories); err != nil {
+		t.Fatal(err)
+	}
+	list, err := stories.List()
+	if err != nil || len(list) != 1 {
+		t.Fatalf("expected exactly one preset after reseeding: %v %d", err, len(list))
 	}
 }

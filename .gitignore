@@ -3,6 +3,7 @@ AGENTS.md
 *.log
 config.json
 stories/
+sessions/
 llm_sessions/
 .gopath/
 .gocache/
