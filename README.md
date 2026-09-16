@@ -38,7 +38,8 @@ story 的 Story settings 里逐个开关。
   模型用 `message` 的 `speaker` 指定是谁在说话。
 - **图片**：story 头像、角色头像、聊天中发图都支持；聊天图片会以多模态（base64 data URL）
   一起发给模型，具备视觉能力的模型可以直接看到。
-- **重新 roll**：一键丢弃上一轮 AI 输出并重写，换一个走向。
+- **按回合重 roll / 编辑输入**：每个 AI 回合末尾都有 ↻，可从任意回合重写；用户消息可 ✎ 编辑，
+  保存后从该处重跑（会丢弃其后的所有回合）。
 - **思考强度可调**：off / minimal / low / medium / high / max（关闭思考即 off）。Settings 里设全局
   默认，**每个 story 也能在 Story settings 里单独改**（含关闭）。
 - **语音（TTS）**：通过 OpenRouter 合成语音，可配置 speech 模型与音色，逐块朗读任意文本。
