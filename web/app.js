@@ -9,6 +9,7 @@ import { Login } from './login.js';
 
 const html = htm.bind(h);
 const LS_KEY = 'genesis.lastSession';
+const LS_SCENE = 'genesis.sceneBar';
 
 // initialAuth is a test seam: the smoke test renders the unlocked app without
 // running effects (which is where the real auth status arrives).
@@ -31,6 +32,15 @@ export function App({ initialAuth = null } = {}) {
   const [toasts, setToasts] = useState([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
+  // The scene strip is handy but eats vertical space on a phone, so it can be
+  // hidden and the choice sticks across reloads.
+  const [sceneBarOpen, setSceneBarOpen] = useState(() => {
+    try {
+      return typeof window === 'undefined' ? true : localStorage.getItem(LS_SCENE) !== 'hidden';
+    } catch (err) {
+      return true;
+    }
+  });
   const [speaking, setSpeaking] = useState(null);
 
   const abortRef = useRef(null);
@@ -46,6 +56,16 @@ export function App({ initialAuth = null } = {}) {
   useEffect(() => {
     sessionRef.current = session;
   }, [session]);
+
+  useEffect(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(LS_SCENE, sceneBarOpen ? 'shown' : 'hidden');
+      }
+    } catch (err) {
+      /* a blocked storage must not break the app */
+    }
+  }, [sceneBarOpen]);
 
   // Choices, tool activity and usage belong to one session. When the active
   // session goes away (e.g. the last one was deleted) they must not linger.
@@ -750,7 +770,8 @@ export function App({ initialAuth = null } = {}) {
           onMenu=${() => setSidebarOpen((v) => !v)}
           onPanel=${() => setPanelOpen((v) => !v)}
         />
-        <${C.SceneBar} scene=${session && session.scene} />
+        <${C.SceneBar} scene=${session && session.scene} open=${sceneBarOpen}
+                        onToggle=${() => setSceneBarOpen((v) => !v)} />
         <${C.MessageList} session=${session} streaming=${streaming} onNewStory=${() => setModal('new-session')}
                               onSpeak=${speak} speakingId=${speaking}
                               onReroll=${rerollFrom} onEdit=${editUserMessage} busy=${streaming} />
@@ -771,6 +792,8 @@ export function App({ initialAuth = null } = {}) {
         open=${panelOpen}
         models=${chatModels}
         model=${config && config.model}
+        sceneBar=${sceneBarOpen}
+        onToggleSceneBar=${() => setSceneBarOpen((v) => !v)}
         onClose=${() => setPanelOpen(false)}
         onEditCast=${() => setModal('story')}
       />

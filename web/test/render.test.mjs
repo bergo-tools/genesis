@@ -4,7 +4,7 @@
 import renderToString from './render-to-string.module.js';
 import { h } from '../vendor/preact.module.js';
 import { App } from '../app.js';
-import { SettingsModal, MessageList, Composer } from '../components.js';
+import { SettingsModal, MessageList, Composer, Choices, SceneBar } from '../components.js';
 import { StoryModal } from '../story.js';
 import { NewSessionModal, StoriesModal, PresetModal } from '../library.js';
 import { Login } from '../login.js';
@@ -80,6 +80,23 @@ const picker = renderToString(h(OptionPicker, {
   onChange: () => {},
   placeholder: 'Select a model',
 }));
+const choices = renderToString(h(Choices, {
+  choices: [
+    { text: 'Draw the blade', description: 'loud and final' },
+    { text: 'Slip away into the fog' },
+  ],
+  onChoose: () => {},
+}));
+const sceneBar = renderToString(h(SceneBar, {
+  scene: { location: '雾中的官道', time: '黄昏', weather: '灰雾', notes: '界石在剥落。' },
+  open: true,
+  onToggle: () => {},
+}));
+const sceneBarHidden = renderToString(h(SceneBar, {
+  scene: { location: '雾中的官道' },
+  open: false,
+  onToggle: () => {},
+}));
 
 const total = check('MessageList', chat, ['hello there', 'well met', '✎', '↻'])
   + check('App', app, ['Genesis', 'Begin a story', 'Create a story to start…', 'agentic roleplay'])
@@ -94,5 +111,12 @@ const total = check('MessageList', chat, ['hello there', 'well met', '✎', '↻
   + check('Composer', composer, ['What do you do?', 'OOC', 'Send'])
   + check('TokenStatus', tokenStatus, ['token-status', 'token-bar', 'token-num', '5.0k/20k', '25% of 20k'])
   + check('TokenPanel', tokenPanel, ['stat-grid', 'Context', 'Cached', '5.0k / 20k (25%)', 'Session total', '13k', '$0.0123'])
-  + check('OptionPicker', picker, ['picker-trigger', 'DeepSeek', 'deepseek/deepseek-chat']);
-console.log('web SSR smoke test OK (' + total + ' chars across 11 renders)');
+  + check('OptionPicker', picker, ['picker-trigger', 'DeepSeek', 'deepseek/deepseek-chat'])
+  + check('Choices', choices, ['choice-pager', 'choices-count', '1 / 2', 'choice-text', 'Draw the blade', 'choice-arrow', 'choice-dots'])
+  + check('SceneBar', sceneBar, ['scene-bar', '雾中的官道', '黄昏', 'scene-hide', '界石在剥落。'])
+  + 0;
+if (sceneBarHidden !== '') {
+  console.error('SceneBar must render nothing when hidden');
+  process.exit(1);
+}
+console.log('web SSR smoke test OK (' + total + ' chars across 14 renders)');

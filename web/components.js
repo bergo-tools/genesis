@@ -146,15 +146,31 @@ export function MessageList({ session, streaming, onNewStory, onSpeak, speakingI
     </section>`;
 }
 
-export function SceneBar({ scene }) {
+// sceneFields lists the non-empty rows of a scene. The top bar and the world
+// panel share it, so hiding the bar never loses the information.
+function sceneFields(scene) {
   const s = scene || {};
-  const fields = [['📍', s.location], ['🕓', s.time], ['☁', s.weather]]
-    .filter(([, v]) => v && String(v).trim());
-  if (!fields.length && !(s.notes || '').trim()) return null;
+  return [
+    ['📍', 'Location', s.location],
+    ['🕓', 'Time', s.time],
+    ['☁', 'Weather', s.weather],
+    ['🎬', 'Background', s.background],
+  ].filter(([, , value]) => value && String(value).trim());
+}
+
+// SceneBar is the strip under the top bar. It can be hidden from its own
+// button or from the Scene section of the world panel.
+export function SceneBar({ scene, open, onToggle }) {
+  const s = scene || {};
+  const fields = sceneFields(s);
+  const notes = (s.notes || '').trim();
+  if (!open || (!fields.length && !notes)) return null;
   return html`
     <section class="scene-bar">
-      ${fields.map(([icon, value]) => html`<span key=${icon}>${icon} <b>${value}</b></span>`)}
-      ${s.notes && html`<span class="muted">${s.notes}</span>`}
+      ${fields.map(([icon, label, value]) => html`<span key=${label}>${icon} <b>${value}</b></span>`)}
+      ${notes && html`<span class="muted">${notes}</span>`}
+      <button class="scene-hide" type="button" aria-label="Hide the scene bar"
+              title="Hide the scene bar" onClick=${onToggle}>▴</button>
     </section>`;
 }
 
@@ -167,16 +183,54 @@ export function StatusBar({ status, step }) {
     </section>`;
 }
 
+// Choices is a horizontal pager: one branch per screen, swipe or use the
+// arrows. Stacking several long options pushed the conversation off a phone.
 export function Choices({ choices, onChoose }) {
-  if (!choices || !choices.length) return null;
+  const list = choices || [];
+  const ref = useRef(null);
+  const [index, setIndex] = useState(0);
+  const first = list[0] ? list[0].text : '';
+  useEffect(() => {
+    setIndex(0);
+    const el = ref.current;
+    if (el) el.scrollLeft = 0;
+  }, [list.length, first]);
+  if (!list.length) return null;
+  const goTo = (next) => {
+    const el = ref.current;
+    const clamped = Math.max(0, Math.min(list.length - 1, next));
+    setIndex(clamped);
+    if (el && el.clientWidth) el.scrollTo({ left: clamped * el.clientWidth, behavior: 'smooth' });
+  };
+  const onScroll = () => {
+    const el = ref.current;
+    if (!el || !el.clientWidth) return;
+    const next = Math.round(el.scrollLeft / el.clientWidth);
+    setIndex((cur) => (cur === next ? cur : next));
+  };
   return html`
     <section class="choices">
-      <span class="choices-label">Choose a path, or write your own below:</span>
-      ${choices.map((choice, index) => html`
-        <button key=${index} type="button" class="choice" onClick=${() => onChoose(choice.text)}>
-          ${choice.text}
-          ${choice.description && html`<small>${choice.description}</small>`}
-        </button>`)}
+      <div class="choices-head">
+        <span class="choices-label">Choose a path, or write your own below</span>
+        <span class="choices-count">${index + 1} / ${list.length}</span>
+      </div>
+      <div class="choice-pager" ref=${ref} onScroll=${onScroll}>
+        ${list.map((choice, i) => html`
+          <button key=${i} type="button" class="choice" onClick=${() => onChoose(choice.text)}>
+            <span class="choice-text">${choice.text}</span>
+            ${choice.description && html`<small>${choice.description}</small>`}
+          </button>`)}
+      </div>
+      ${list.length > 1 && html`
+        <div class="choices-nav">
+          <button class="choice-arrow" type="button" aria-label="Previous choice"
+                  disabled=${index === 0} onClick=${() => goTo(index - 1)}>‹</button>
+          <span class="choice-dots">
+            ${list.map((_, i) => html`<i key=${i} class=${i === index ? 'on' : ''}></i>`)}
+          </span>
+          <button class="choice-arrow" type="button" aria-label="Next choice"
+                  disabled=${index === list.length - 1} onClick=${() => goTo(index + 1)}>›</button>
+        </div>`}
     </section>`;
 }
 
@@ -303,8 +357,11 @@ export function Topbar({ session, models, model, onMenu, onPanel }) {
     </header>`;
 }
 
-export function Panel({ session, activity, open, models, model, onClose, onEditCast }) {
+export function Panel({ session, activity, open, models, model, sceneBar, onToggleSceneBar, onClose, onEditCast }) {
   const chars = (session && session.characters) || [];
+  const scene = (session && session.scene) || {};
+  const sceneRows = sceneFields(scene);
+  const sceneNotes = (scene.notes || '').trim();
   return html`
     <aside class=${'panel' + (open ? ' open' : '')} aria-label="World state">
       <div class="panel-head">
@@ -313,6 +370,21 @@ export function Panel({ session, activity, open, models, model, onClose, onEditC
       </div>
       <div class="panel-body">
         <${TokenPanel} session=${session} models=${models} model=${model} />
+        <section class="panel-section">
+          <div class="panel-head" style="padding:0;border:none">
+            <h3 style="margin:0">Scene</h3>
+            <label class="switch" title="Show the scene strip under the top bar">
+              <input type="checkbox" checked=${!!sceneBar} onChange=${onToggleSceneBar} /> Top bar
+            </label>
+          </div>
+          ${sceneRows.length
+            ? html`<div class="scene-fields">
+                ${sceneRows.map(([icon, label, value]) => html`
+                  <div class="scene-field" key=${label}><span>${icon} ${label}</span><b>${value}</b></div>`)}
+              </div>`
+            : html`<p class="muted">Nothing set yet.</p>`}
+          ${sceneNotes && html`<p class="hint">${sceneNotes}</p>`}
+        </section>
         <section class="panel-section">
           <div class="panel-head" style="padding:0;border:none">
             <h3 style="margin:0">Cast</h3>
