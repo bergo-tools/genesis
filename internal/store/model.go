@@ -9,33 +9,35 @@ import (
 	"github.com/zp/genesis/internal/llm"
 )
 
-// Session is a single roleplay conversation plus its world state.
+// Session is a single story: its cast, its world state and its transcript.
 type Session struct {
 	ID         string         `json:"id"`
 	Title      string         `json:"title"`
+	Avatar     string         `json:"avatar,omitempty"`
 	CreatedAt  time.Time      `json:"createdAt"`
 	UpdatedAt  time.Time      `json:"updatedAt"`
 	Model      string         `json:"model,omitempty"`
 	Settings   Settings       `json:"settings"`
 	Persona    Persona        `json:"persona"`
 	Characters []*Character   `json:"characters"`
-	Scene      Scene          `json:"scene"`
 	Messages   []*Message     `json:"messages"`
-	Memories   []*Memory      `json:"memories"`
 	State      map[string]any `json:"state,omitempty"`
 
-	// History is the model-facing transcript (the system prompt is rebuilt each
-	// turn and therefore is not stored here).
+	// History is the model-facing transcript. The system prompt is rebuilt on
+	// every turn and is therefore not stored here. Image entries keep only the
+	// asset name; bytes are resolved when a request is built.
 	History []llm.Message `json:"history,omitempty"`
 }
 
-// Settings holds per-session generation overrides.
+// Settings holds per-story generation options.
 type Settings struct {
-	Temperature  float64 `json:"temperature"`
-	MaxTokens    int     `json:"maxTokens"`
-	MaxSteps     int     `json:"maxSteps"`
-	ToolChoice   string  `json:"toolChoice"`
-	SystemPrompt string  `json:"systemPrompt,omitempty"`
+	Temperature     float64 `json:"temperature"`
+	MaxTokens       int     `json:"maxTokens"`
+	MaxSteps        int     `json:"maxSteps"`
+	ToolChoice      string  `json:"toolChoice"`
+	SystemPrompt    string  `json:"systemPrompt,omitempty"`
+	ReasoningEffort string  `json:"reasoningEffort,omitempty"`
+	ChoicesEnabled  bool    `json:"choicesEnabled"`
 }
 
 // Persona describes the player.
@@ -44,27 +46,14 @@ type Persona struct {
 	Description string `json:"description"`
 }
 
-// Character is an AI-controlled actor.
+// Character is one AI-controlled actor in the story.
 type Character struct {
-	ID          string         `json:"id"`
-	Name        string         `json:"name"`
-	Description string         `json:"description,omitempty"`
-	Personality string         `json:"personality,omitempty"`
-	Scenario    string         `json:"scenario,omitempty"`
-	Appearance  string         `json:"appearance,omitempty"`
-	Avatar      string         `json:"avatar,omitempty"`
-	Tags        []string       `json:"tags,omitempty"`
-	State       map[string]any `json:"state,omitempty"`
-	CreatedAt   time.Time      `json:"createdAt"`
-}
-
-// Scene is the current location and atmosphere.
-type Scene struct {
-	Location   string `json:"location,omitempty"`
-	Time       string `json:"time,omitempty"`
-	Weather    string `json:"weather,omitempty"`
-	Background string `json:"background,omitempty"`
-	Notes      string `json:"notes,omitempty"`
+	ID          string    `json:"id"`
+	Name        string    `json:"name"`
+	Description string    `json:"description,omitempty"`
+	Personality string    `json:"personality,omitempty"`
+	Avatar      string    `json:"avatar,omitempty"`
+	CreatedAt   time.Time `json:"createdAt"`
 }
 
 // Message kinds rendered by the UI.
@@ -74,13 +63,12 @@ const (
 	KindAction    = "action"
 	KindNarration = "narration"
 	KindThought   = "thought"
-	KindOOC       = "ooc"
-	KindDice      = "dice"
 	KindPrompt    = "prompt"
+	KindState     = "state"
 	KindSystem    = "system"
 )
 
-// Message is a single displayable event in the chat.
+// Message is one displayable event in the chat.
 type Message struct {
 	ID        string          `json:"id"`
 	Role      string          `json:"role"`
@@ -88,21 +76,12 @@ type Message struct {
 	Speaker   string          `json:"speaker,omitempty"`
 	Text      string          `json:"text,omitempty"`
 	Mood      string          `json:"mood,omitempty"`
+	Images    []string        `json:"images,omitempty"`
 	Args      json.RawMessage `json:"args,omitempty"`
-	Meta      map[string]any  `json:"meta,omitempty"`
 	CreatedAt time.Time       `json:"createdAt"`
 }
 
-// Memory is a long-term fact the agent chose to remember.
-type Memory struct {
-	ID         string    `json:"id"`
-	Content    string    `json:"content"`
-	Importance int       `json:"importance"`
-	Tags       []string  `json:"tags,omitempty"`
-	CreatedAt  time.Time `json:"createdAt"`
-}
-
-// Choice is a suggested player action.
+// Choice is one branch offered to the player.
 type Choice struct {
 	Text        string `json:"text"`
 	Description string `json:"description,omitempty"`
@@ -140,6 +119,20 @@ func (s *Session) PrimaryCharacter() *Character {
 		return nil
 	}
 	return s.Characters[0]
+}
+
+// CharacterNames returns the cast names in order.
+func (s *Session) CharacterNames() []string {
+	if s == nil {
+		return nil
+	}
+	names := make([]string, 0, len(s.Characters))
+	for _, c := range s.Characters {
+		if c != nil && c.Name != "" {
+			names = append(names, c.Name)
+		}
+	}
+	return names
 }
 
 func equalFold(a, b string) bool {

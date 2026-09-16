@@ -19,8 +19,7 @@ type OpenRouterClient struct {
 	model string
 }
 
-// NewOpenRouterClient builds a client. baseURL and model may be empty, in
-// which case the SDK default host and the request model are used.
+// NewOpenRouterClient builds a client. baseURL and model may be empty.
 func NewOpenRouterClient(apiKey, baseURL, model string) *OpenRouterClient {
 	opts := []openrouter.SDKOption{}
 	if strings.TrimSpace(apiKey) != "" {
@@ -57,6 +56,9 @@ func (c *OpenRouterClient) Complete(ctx context.Context, req Request) (*Response
 	}
 	if req.MaxTokens > 0 {
 		sdkReq.MaxTokens = optionalnullable.From(openrouter.Pointer(int64(req.MaxTokens)))
+	}
+	if level := normalizeEffort(req.ReasoningEffort); level != "" {
+		sdkReq.ReasoningEffort = optionalnullable.From(openrouter.Pointer(components.ChatRequestReasoningEffort(level)))
 	}
 
 	res, err := c.sdk.Chat.Send(ctx, sdkReq, nil)
@@ -104,6 +106,21 @@ func (c *OpenRouterClient) Complete(ctx context.Context, req Request) (*Response
 	return out, nil
 }
 
+// normalizeEffort maps UI values onto OpenRouter reasoning effort values.
+// An empty result means "do not send the parameter".
+func normalizeEffort(level string) string {
+	switch strings.ToLower(strings.TrimSpace(level)) {
+	case "", "default", "provider":
+		return ""
+	case "off", "none", "disabled", "false", "no":
+		return "none"
+	case "minimal", "low", "medium", "high", "max", "xhigh":
+		return strings.ToLower(strings.TrimSpace(level))
+	default:
+		return ""
+	}
+}
+
 func assistantContentToText(content components.ChatAssistantMessageContent) string {
 	if content.Str != nil {
 		return *content.Str
@@ -148,10 +165,7 @@ func toSDKMessages(msgs []Message) []components.ChatMessages {
 				Role:    components.ChatSystemMessageRoleSystem,
 			}))
 		case RoleUser:
-			out = append(out, components.CreateChatMessagesUser(components.ChatUserMessage{
-				Content: components.CreateChatUserMessageContentStr(m.Content),
-				Role:    components.ChatUserMessageRoleUser,
-			}))
+			out = append(out, toSDKUserMessage(m))
 		case RoleAssistant:
 			am := components.ChatAssistantMessage{}
 			if m.Content != "" {
@@ -182,6 +196,41 @@ func toSDKMessages(msgs []Message) []components.ChatMessages {
 		}
 	}
 	return out
+}
+
+func toSDKUserMessage(m Message) components.ChatMessages {
+	if len(m.Images) == 0 {
+		return components.CreateChatMessagesUser(components.ChatUserMessage{
+			Content: components.CreateChatUserMessageContentStr(m.Content),
+			Role:    components.ChatUserMessageRoleUser,
+		})
+	}
+	items := make([]components.ChatContentItems, 0, len(m.Images)+1)
+	if strings.TrimSpace(m.Content) != "" {
+		items = append(items, components.CreateChatContentItemsText(components.ChatContentText{
+			Text: m.Content,
+			Type: components.ChatContentTextTypeText,
+		}))
+	}
+	for _, img := range m.Images {
+		if strings.TrimSpace(img.DataURL) == "" {
+			continue
+		}
+		items = append(items, components.CreateChatContentItemsImageURL(components.ChatContentImage{
+			ImageURL: components.ChatContentImageImageURL{URL: img.DataURL},
+			Type:     components.ChatContentImageType("image_url"),
+		}))
+	}
+	if len(items) == 0 {
+		return components.CreateChatMessagesUser(components.ChatUserMessage{
+			Content: components.CreateChatUserMessageContentStr(m.Content),
+			Role:    components.ChatUserMessageRoleUser,
+		})
+	}
+	return components.CreateChatMessagesUser(components.ChatUserMessage{
+		Content: components.CreateChatUserMessageContentArrayOfChatContentItems(items),
+		Role:    components.ChatUserMessageRoleUser,
+	})
 }
 
 func toSDKTools(defs []ToolDef) []components.ChatFunctionTool {

@@ -1,6 +1,6 @@
 // Package llm defines a small provider-neutral chat model used by the agent
 // loop. It mirrors only the subset of the OpenAI-style chat API that Genesis
-// needs so tool-calling logic stays independent of any single SDK.
+// needs so tool-calling and multimodal logic stay SDK-independent.
 package llm
 
 import "context"
@@ -13,6 +13,13 @@ const (
 	RoleTool      = "tool"
 )
 
+// Image is an attached picture. Name is persisted with the story; DataURL is
+// resolved on demand and never written to disk.
+type Image struct {
+	Name    string `json:"name,omitempty"`
+	DataURL string `json:"dataUrl,omitempty"`
+}
+
 // ToolCall is a single request from the model to invoke a tool.
 type ToolCall struct {
 	ID        string `json:"id"`
@@ -24,6 +31,7 @@ type ToolCall struct {
 type Message struct {
 	Role       string     `json:"role"`
 	Content    string     `json:"content,omitempty"`
+	Images     []Image    `json:"images,omitempty"`
 	ToolCalls  []ToolCall `json:"toolCalls,omitempty"`
 	ToolCallID string     `json:"toolCallId,omitempty"`
 	Name       string     `json:"name,omitempty"`
@@ -55,6 +63,9 @@ type Request struct {
 	Temperature       float64
 	MaxTokens         int
 	ParallelToolCalls bool
+	// ReasoningEffort is one of "", "none"/"off", "minimal", "low", "medium",
+	// "high", "max". Empty leaves the provider default untouched.
+	ReasoningEffort string
 }
 
 // Usage reports token accounting.

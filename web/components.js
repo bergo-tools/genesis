@@ -1,11 +1,21 @@
 import { h } from './vendor/preact.module.js';
 import { useEffect, useRef, useState } from './vendor/hooks.module.js';
 import htm from './vendor/htm.module.js';
+import { assetURL } from './api.js';
 import { formatText, initial } from './format.js';
 
 const html = htm.bind(h);
 
-function avatarText(message, session) {
+const REASONING_LEVELS = [
+  ['off', 'off (no thinking)'],
+  ['minimal', 'minimal'],
+  ['low', 'low'],
+  ['medium', 'medium'],
+  ['high', 'high'],
+  ['max', 'max'],
+];
+
+function avatarFor(message, session) {
   if (message.role === 'user') {
     const name = session && session.persona && session.persona.name;
     return name ? initial(name) : '🧍';
@@ -13,15 +23,21 @@ function avatarText(message, session) {
   const chars = (session && session.characters) || [];
   const speaker = String(message.speaker || '').toLowerCase();
   const found = chars.find((c) => String(c.name || '').toLowerCase() === speaker);
-  if (found && found.avatar) return found.avatar;
+  if (found && found.avatar && session) return html`<img src=${assetURL(session.id, found.avatar)} alt="" />`;
   if (found && found.name) return initial(found.name);
   switch (message.kind) {
     case 'narration': return '✦';
-    case 'dice': return '🎲';
     case 'prompt': return '❯';
-    case 'ooc': return '💬';
+    case 'thought': return '…';
     default: return '◆';
   }
+}
+
+function messageImages(message, session) {
+  if (message.images && message.images.length && session) {
+    return message.images.map((name) => assetURL(session.id, name)).filter(Boolean);
+  }
+  return message.localImages || [];
 }
 
 export function Message({ message, session }) {
@@ -29,17 +45,22 @@ export function Message({ message, session }) {
   const speaker = message.speaker || (message.role === 'user'
     ? ((session && session.persona && session.persona.name) || 'You')
     : '');
-  const showSpeaker = speaker && message.kind !== 'narration' && message.kind !== 'dice';
+  const showSpeaker = speaker && message.kind !== 'narration';
+  const images = messageImages(message, session);
   return html`
     <div class=${cls} data-id=${message.id}>
-      <div class="avatar">${avatarText(message, session)}</div>
+      <div class="avatar">${avatarFor(message, session)}</div>
       <div class="body">
         ${(showSpeaker || message.mood) && html`
           <div class="speaker">
             ${showSpeaker && html`<span>${speaker}</span>`}
             ${message.mood && html`<span class="mood">${message.mood}</span>`}
           </div>`}
-        <div class="text" dangerouslySetInnerHTML=${{ __html: formatText(message.text) }}></div>
+        ${images.length > 0 && html`
+          <div class="attachments">
+            ${images.map((src, i) => html`<img class="attachment" key=${i} src=${src} alt="attachment" loading="lazy" />`)}
+          </div>`}
+        ${message.text ? html`<div class="text" dangerouslySetInnerHTML=${{ __html: formatText(message.text) }}></div>` : null}
       </div>
     </div>`;
 }
@@ -58,7 +79,9 @@ export function MessageList({ session, streaming, onNewStory }) {
       <section class="messages" ref=${ref}>
         <div class="empty">
           <h2>Begin a story</h2>
-          <p>Genesis is an agentic game master. The model never writes plain text: every beat, scene change and dice roll is a tool call, which is what makes it easy to extend.</p>
+          <p>Genesis is an agentic game master. Every beat is a tool call: the cast speaks with
+             message, thinks with think, remembers with update_state, and hands you the next
+             branches with choices.</p>
           <p><button class="btn btn-primary" type="button" onClick=${onNewStory}>Create your first story</button></p>
         </div>
       </section>`;
@@ -66,18 +89,6 @@ export function MessageList({ session, streaming, onNewStory }) {
   return html`
     <section class="messages" ref=${ref}>
       ${messages.map((m) => html`<${Message} key=${m.id} message=${m} session=${session} />`)}
-    </section>`;
-}
-
-export function SceneBar({ scene }) {
-  const s = scene || {};
-  const fields = [['\u{1F4CD}', s.location], ['\u{1F553}', s.time], ['\u2601', s.weather]]
-    .filter(([, v]) => v && String(v).trim());
-  if (!fields.length && !(s.notes || '').trim()) return null;
-  return html`
-    <section class="scene-bar">
-      ${fields.map(([icon, value]) => html`<span key=${icon}>${icon} <b>${value}</b></span>`)}
-      ${s.notes && html`<span class="muted">${s.notes}</span>`}
     </section>`;
 }
 
@@ -94,6 +105,7 @@ export function Choices({ choices, onChoose }) {
   if (!choices || !choices.length) return null;
   return html`
     <section class="choices">
+      <span class="choices-label">Choose a path, or write your own below:</span>
       ${choices.map((choice, index) => html`
         <button key=${index} type="button" class="choice" onClick=${() => onChoose(choice.text)}>
           ${choice.text}
@@ -102,41 +114,72 @@ export function Choices({ choices, onChoose }) {
     </section>`;
 }
 
-export function Composer({ streaming, disabled, onSend, onStop }) {
+export function Composer({ streaming, disabled, uploading, hasChoices, canReroll, onSend, onStop, onReroll }) {
   const ref = useRef(null);
+  const fileRef = useRef(null);
   const [value, setValue] = useState('');
+  const [files, setFiles] = useState([]);
+
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
     el.style.height = 'auto';
     el.style.height = Math.min(el.scrollHeight, Math.round(window.innerHeight * 0.4)) + 'px';
   }, [value]);
+
+  const busy = streaming || uploading;
   const submit = () => {
     const text = value.trim();
-    if (!text || streaming) return;
+    if (busy || (!text && !files.length)) return;
+    const payload = files.map((f) => f.file);
     setValue('');
-    onSend(text);
+    setFiles([]);
+    onSend(text, payload);
   };
+  const addFiles = (e) => {
+    const picked = Array.from(e.currentTarget.files || []);
+    if (picked.length) {
+      setFiles((cur) => cur.concat(picked.map((file) => ({ file, url: URL.createObjectURL(file) }))));
+    }
+    e.currentTarget.value = '';
+  };
+  const removeFile = (index) => setFiles((cur) => cur.filter((_, i) => i !== index));
+
   return html`
     <footer class="composer">
-      <textarea
-        ref=${ref}
-        rows="1"
-        placeholder="What do you do?"
-        autocomplete="off"
-        value=${value}
-        onInput=${(e) => setValue(e.currentTarget.value)}
-        onKeyDown=${(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); } }}
-      ></textarea>
-      ${streaming
-        ? html`<button class="btn btn-danger" type="button" onClick=${onStop}>Stop</button>`
-        : html`<button class="btn btn-primary" type="button" disabled=${Boolean(disabled)} onClick=${submit}>Send</button>`}
+      ${files.length > 0 && html`
+        <div class="composer-attachments">
+          ${files.map((f, i) => html`
+            <div class="attachment-chip" key=${i}>
+              <img src=${f.url} alt="" />
+              <button type="button" title="Remove" onClick=${() => removeFile(i)}>×</button>
+            </div>`)}
+        </div>`}
+      <div class="composer-row">
+        <button class="btn btn-ghost attach-btn" type="button" title="Attach an image"
+                disabled=${busy} onClick=${() => fileRef.current && fileRef.current.click()}>🖼</button>
+        <input ref=${fileRef} type="file" accept="image/*" multiple hidden onChange=${addFiles} />
+        <textarea
+          ref=${ref}
+          rows="1"
+          value=${value}
+          autocomplete="off"
+          placeholder=${hasChoices ? 'Or write your own action…' : 'What do you do?'}
+          onInput=${ (e) => setValue(e.currentTarget.value) }
+          onKeyDown=${ (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); } } }
+        ></textarea>
+        ${!streaming && canReroll && html`
+          <button class="btn btn-ghost" type="button" title="Re-roll this response" onClick=${onReroll}>↻</button>`}
+        ${streaming
+          ? html`<button class="btn btn-danger" type="button" onClick=${onStop}>Stop</button>`
+          : html`<button class="btn btn-primary" type="button" disabled=${Boolean(disabled) || uploading} onClick=${submit}>${uploading ? '…' : 'Send'}</button>`}
+      </div>
     </footer>`;
 }
 
 export function Sidebar({ sessions, activeId, open, onOpen, onNew, onSettings, onTools }) {
   return html`
-    <aside class=${'sidebar' + (open ? ' open' : '')} aria-label="Sessions">
+    <aside class=${'sidebar' + (open ? ' open' : '')} aria-label="Stories">
       <div class="sidebar-head">
         <span class="brand"><span class="brand-mark">◆</span> Genesis</span>
         <button class="btn btn-primary btn-sm" type="button" onClick=${onNew}>New story</button>
@@ -144,14 +187,11 @@ export function Sidebar({ sessions, activeId, open, onOpen, onNew, onSettings, o
       <nav class="session-list">
         ${!sessions.length && html`<p class="muted" style="padding:10px">No stories yet.</p>`}
         ${sessions.map((s) => html`
-          <button
-            key=${s.id}
-            type="button"
-            class=${'session-item' + (s.id === activeId ? ' active' : '')}
-            onClick=${() => onOpen(s.id)}
-          >
+          <button key=${s.id} type="button"
+                  class=${'session-item' + (s.id === activeId ? ' active' : '')}
+                  onClick=${() => onOpen(s.id)}>
             <span class="t">${s.title || 'Untitled'}</span>
-            <span class="s">${(s.character || '') + (s.messageCount ? ' · ' + s.messageCount + ' msg' : '')}</span>
+            <span class="s">${((s.characters || []).join(', ') || '') + (s.messageCount ? ' · ' + s.messageCount + ' msg' : '')}</span>
           </button>`)}
       </nav>
       <div class="sidebar-foot">
@@ -168,22 +208,20 @@ export function Topbar({ session, usage, onMenu, onPanel }) {
   if (usage && usage.totalTokens) bits.push(usage.totalTokens + ' tok');
   return html`
     <header class="topbar">
-      <button id="menu-toggle" class="icon-btn" type="button" aria-label="Toggle sessions" onClick=${onMenu}>\u2630</button>
+      <button id="menu-toggle" class="icon-btn" type="button" aria-label="Toggle stories" onClick=${onMenu}>☰</button>
+      ${session && session.avatar
+        ? html`<img class="story-avatar" src=${assetURL(session.id, session.avatar)} alt="" />`
+        : null}
       <div class="topbar-title">
         <span id="chat-title">${(session && session.title) || 'Genesis'}</span>
         <small id="chat-subtitle">${bits.join(' · ') || 'agentic roleplay'}</small>
       </div>
-      <button class="icon-btn" type="button" aria-label="Toggle world panel" onClick=${onPanel}>\u25E7</button>
+      <button class="icon-btn" type="button" aria-label="Toggle world panel" onClick=${onPanel}>◧</button>
     </header>`;
 }
 
-export function Panel({ session, activity, open, onClose }) {
-  const scene = (session && session.scene) || {};
-  const sceneRows = ['location', 'time', 'weather', 'background', 'notes']
-    .filter((k) => scene[k] && String(scene[k]).trim())
-    .map((k) => html`<div key=${k}><b>${k}:</b> ${scene[k]}</div>`);
+export function Panel({ session, activity, open, onClose, onEditCast }) {
   const chars = (session && session.characters) || [];
-  const memories = ((session && session.memories) || []).slice().reverse().slice(0, 40);
   return html`
     <aside class=${'panel' + (open ? ' open' : '')} aria-label="World state">
       <div class="panel-head">
@@ -192,36 +230,26 @@ export function Panel({ session, activity, open, onClose }) {
       </div>
       <div class="panel-body">
         <section class="panel-section">
-          <h3>Scene</h3>
-          <div class=${'panel-scene' + (sceneRows.length ? '' : ' muted')}>${sceneRows.length ? sceneRows : 'Not established yet.'}</div>
-        </section>
-        <section class="panel-section">
-          <h3>Characters</h3>
+          <div class="panel-head" style="padding:0;border:none">
+            <h3 style="margin:0">Cast</h3>
+            <button class="btn btn-ghost btn-sm" type="button" onClick=${onEditCast} disabled=${!session}>Edit cast</button>
+          </div>
           ${!chars.length
-            ? html`<p class="muted">None yet.</p>`
+            ? html`<p class="muted">No characters yet.</p>`
             : chars.map((c) => html`
               <div class="char-card" key=${c.id || c.name}>
-                <div class="avatar">${c.avatar || initial(c.name)}</div>
+                <div class="avatar">
+                  ${c.avatar && session ? html`<img src=${assetURL(session.id, c.avatar)} alt="" />` : initial(c.name)}
+                </div>
                 <div>
                   <div class="name">${c.name || 'Unnamed'}</div>
                   <div class="desc">${c.description || c.personality || ''}</div>
-                  ${c.state && Object.keys(c.state).length > 0 && html`
-                    <div class="chips">
-                      ${Object.entries(c.state).map(([k, v]) => html`
-                        <span class="chip" key=${k}>${k + ': ' + (typeof v === 'object' ? JSON.stringify(v) : v)}</span>`)}
-                    </div>`}
                 </div>
               </div>`)}
         </section>
         <section class="panel-section">
           <h3>World state</h3>
           <pre class="state-json">${JSON.stringify((session && session.state) || {}, null, 2)}</pre>
-        </section>
-        <section class="panel-section">
-          <h3>Memories</h3>
-          ${!memories.length
-            ? html`<p class="muted">Nothing remembered yet.</p>`
-            : memories.map((m) => html`<div class="mem-item" key=${m.id}><span class="imp">${m.importance || 3}</span>${m.content}</div>`)}
         </section>
         <section class="panel-section">
           <h3>Agent activity</h3>
@@ -244,6 +272,47 @@ export function Panel({ session, activity, open, onClose }) {
     </aside>`;
 }
 
+export function CharacterEditor({ character, index, sessionId, onChange, onRemove, canRemove }) {
+  const set = (key) => (e) => onChange(index, { [key]: e.currentTarget.value });
+  const pick = (e) => {
+    const file = e.currentTarget.files && e.currentTarget.files[0];
+    if (file) onChange(index, { avatarFile: file, avatarPreview: URL.createObjectURL(file) });
+  };
+  const src = character.avatarPreview || (character.avatar && sessionId ? assetURL(sessionId, character.avatar) : '');
+  return html`
+    <div class="char-editor">
+      <div class="char-editor-head">
+        <span class="char-editor-title">Character ${index + 1}</span>
+        ${canRemove && html`<button class="btn btn-ghost btn-sm" type="button" onClick=${() => onRemove(index)}>Remove</button>`}
+      </div>
+      <div class="char-editor-body">
+        <label class="avatar-picker" title="Upload avatar">
+          ${src ? html`<img src=${src} alt="" />` : (character.name ? initial(character.name) : '+')}
+          <input type="file" accept="image/*" onChange=${pick} />
+        </label>
+        <div class="char-editor-fields">
+          <label class="field"><span>Name</span>
+            <input type="text" value=${character.name} placeholder="Ilyra" onInput=${set('name')} /></label>
+          <label class="field"><span>Description</span>
+            <input type="text" value=${character.description} placeholder="An archivist who guards a drowned library."
+                   onInput=${set('description')} /></label>
+          <label class="field"><span>Personality</span>
+            <input type="text" value=${character.personality} placeholder="Dry, patient, secretly sentimental."
+                   onInput=${set('personality')} /></label>
+        </div>
+      </div>
+    </div>`;
+}
+
+function ReasoningSelect({ value, onChange }) {
+  return html`
+    <label class="field"><span>Thinking effort</span>
+      <select value=${value} onChange=${ (e) => onChange(e.currentTarget.value) }>
+        ${REASONING_LEVELS.map(([id, label]) => html`<option key=${id} value=${id}>${label}</option>`)}
+      </select>
+    </label>`;
+}
+
 export function SettingsModal({ config, onClose, onSave, onLoadModels }) {
   const cfg = config || {};
   const [form, setForm] = useState({
@@ -252,9 +321,11 @@ export function SettingsModal({ config, onClose, onSave, onLoadModels }) {
     model: cfg.model || '',
     temperature: cfg.temperature != null ? cfg.temperature : 1,
     maxTokens: cfg.maxTokens || 2048,
-    maxSteps: cfg.maxSteps || 8,
+    maxSteps: cfg.maxSteps || 6,
     toolChoice: cfg.toolChoice || 'auto',
     systemPrompt: cfg.systemPrompt || '',
+    reasoningEffort: cfg.reasoningEffort || 'off',
+    choicesEnabled: cfg.choicesEnabled !== false,
   });
   const [models, setModels] = useState([]);
   const [busy, setBusy] = useState(false);
@@ -276,45 +347,54 @@ export function SettingsModal({ config, onClose, onSave, onLoadModels }) {
       maxSteps: Number(form.maxSteps),
       toolChoice: form.toolChoice,
       systemPrompt: form.systemPrompt,
+      reasoningEffort: form.reasoningEffort,
+      choicesEnabled: form.choicesEnabled,
     };
     if (form.apiKey.trim()) body.apiKey = form.apiKey.trim();
     onSave(body);
   };
   return html`
-    <div class="modal" onClick=${(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div class="modal" onClick=${ (e) => { if (e.target === e.currentTarget) onClose(); } }>
       <div class="modal-card">
-        <header class="modal-head">
-          <h2>Settings</h2>
-          <button class="icon-btn" type="button" onClick=${onClose}>×</button>
-        </header>
+        <header class="modal-head"><h2>Settings</h2>
+          <button class="icon-btn" type="button" onClick=${onClose}>×</button></header>
         <div class="modal-body">
           <label class="field"><span>API key</span>
-            <input type="password" placeholder=${cfg.hasKey ? '•••••••• (leave blank to keep)' : 'sk-or-...'} value=${form.apiKey} onInput=${set('apiKey')} />
-          </label>
+            <input type="password" placeholder=${cfg.hasKey ? '•••••••• (leave blank to keep)' : 'sk-or-...'}
+                   value=${form.apiKey} onInput=${set('apiKey')} /></label>
           <p class="hint">${cfg.hasKey ? 'A key is configured. Leave blank to keep it.' : 'No key configured yet.'}</p>
           <label class="field"><span>Base URL</span><input type="text" value=${form.baseUrl} onInput=${set('baseUrl')} /></label>
           <div class="row">
-            <label class="field grow"><span>Model</span><input type="text" list="model-options" value=${form.model} onInput=${set('model')} /></label>
+            <label class="field grow"><span>Model</span>
+              <input type="text" list="model-options" value=${form.model} onInput=${set('model')} /></label>
             <button class="btn btn-ghost btn-sm" type="button" disabled=${busy} onClick=${load}>${busy ? '…' : 'Load'}</button>
           </div>
           <datalist id="model-options">
             ${models.map((m) => html`<option value=${m.id} label=${m.name} key=${m.id}></option>`)}
           </datalist>
           <div class="row">
-            <label class="field"><span>Temperature</span><input type="number" min="0" max="2" step="0.05" value=${form.temperature} onInput=${set('temperature')} /></label>
-            <label class="field"><span>Max tokens</span><input type="number" min="64" step="64" value=${form.maxTokens} onInput=${set('maxTokens')} /></label>
-            <label class="field"><span>Max steps</span><input type="number" min="1" max="40" value=${form.maxSteps} onInput=${set('maxSteps')} /></label>
+            <label class="field"><span>Temperature</span>
+              <input type="number" min="0" max="2" step="0.05" value=${form.temperature} onInput=${set('temperature')} /></label>
+            <label class="field"><span>Max tokens</span>
+              <input type="number" min="64" step="64" value=${form.maxTokens} onInput=${set('maxTokens')} /></label>
+            <label class="field"><span>Max steps</span>
+              <input type="number" min="1" max="40" value=${form.maxSteps} onInput=${set('maxSteps')} /></label>
           </div>
+          <ReasoningSelect value=${form.reasoningEffort} onChange=${ (v) => setForm((f) => ({ ...f, reasoningEffort: v })) } />
+          <label class="switch">
+            <input type="checkbox" checked=${form.choicesEnabled}
+                   onChange=${ (e) => setForm((f) => ({ ...f, choicesEnabled: e.currentTarget.checked })) } />
+            Require the choices tool at the end of every turn
+          </label>
           <label class="field"><span>Tool choice</span>
             <select value=${form.toolChoice} onChange=${set('toolChoice')}>
               <option value="auto">auto</option>
               <option value="required">required (force a tool call)</option>
               <option value="none">none</option>
-            </select>
-          </label>
+            </select></label>
           <label class="field"><span>Global director instructions</span>
-            <textarea rows="4" placeholder="Extra standing instructions appended to every system prompt." value=${form.systemPrompt} onInput=${set('systemPrompt')}></textarea>
-          </label>
+            <textarea rows="4" placeholder="Extra standing instructions appended to every system prompt."
+                      value=${form.systemPrompt} onInput=${set('systemPrompt')}></textarea></label>
         </div>
         <footer class="modal-foot">
           <button class="btn btn-ghost" type="button" onClick=${onClose}>Cancel</button>
@@ -324,52 +404,162 @@ export function SettingsModal({ config, onClose, onSave, onLoadModels }) {
     </div>`;
 }
 
-export function NewStoryModal({ onClose, onCreate }) {
-  const [form, setForm] = useState({
-    title: '', personaName: '', personaDesc: '',
-    name: '', avatar: '', description: '', personality: '', scenario: '', greeting: '',
-  });
-  const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.currentTarget.value }));
-  const create = () => {
-    onCreate({
-      title: form.title.trim(),
-      persona: { name: form.personaName.trim(), description: form.personaDesc.trim() },
-      character: {
-        name: form.name.trim(),
-        avatar: form.avatar.trim(),
-        description: form.description.trim(),
-        personality: form.personality.trim(),
-        scenario: form.scenario.trim(),
-        greeting: form.greeting.trim(),
-      },
-    });
+function newCharacter(seed) {
+  return { key: 'c' + Math.random().toString(36).slice(2), id: '', name: '', description: '', personality: '', avatar: '', avatarFile: null, avatarPreview: '' };
+}
+
+export function NewStoryModal({ config, onClose, onCreate }) {
+  const cfg = config || {};
+  const [title, setTitle] = useState('');
+  const [personaName, setPersonaName] = useState('');
+  const [personaDesc, setPersonaDesc] = useState('');
+  const [greeting, setGreeting] = useState('');
+  const [model, setModel] = useState(cfg.model || '');
+  const [choicesEnabled, setChoicesEnabled] = useState(true);
+  const [reasoningEffort, setReasoningEffort] = useState(cfg.reasoningEffort || 'off');
+  const [characters, setCharacters] = useState([newCharacter()]);
+  const [avatarFile, setAvatarFile] = useState(null);
+  const [avatarPreview, setAvatarPreview] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const update = (index, patch) => setCharacters((cur) => cur.map((c, i) => (i === index ? { ...c, ...patch } : c)));
+  const remove = (index) => setCharacters((cur) => cur.filter((_, i) => i !== index));
+  const pickStoryAvatar = (e) => {
+    const file = e.currentTarget.files && e.currentTarget.files[0];
+    if (file) {
+      setAvatarFile(file);
+      setAvatarPreview(URL.createObjectURL(file));
+    }
+  };
+  const create = async () => {
+    setBusy(true);
+    try {
+      await onCreate({
+        title, personaName, personaDesc, greeting, model, choicesEnabled, reasoningEffort,
+        avatarFile, characters,
+      });
+    } finally {
+      setBusy(false);
+    }
   };
   return html`
-    <div class="modal" onClick=${(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div class="modal" onClick=${ (e) => { if (e.target === e.currentTarget) onClose(); } }>
       <div class="modal-card">
-        <header class="modal-head">
-          <h2>New story</h2>
-          <button class="icon-btn" type="button" onClick=${onClose}>×</button>
-        </header>
+        <header class="modal-head"><h2>New story</h2>
+          <button class="icon-btn" type="button" onClick=${onClose}>×</button></header>
         <div class="modal-body">
-          <label class="field"><span>Title</span><input type="text" placeholder="Optional" value=${form.title} onInput=${set('title')} /></label>
-          <div class="grid-2">
-            <label class="field"><span>Your name</span><input type="text" placeholder="The player" value=${form.personaName} onInput=${set('personaName')} /></label>
-            <label class="field"><span>Your description</span><input type="text" placeholder="A wandering cartographer" value=${form.personaDesc} onInput=${set('personaDesc')} /></label>
+          <div class="story-avatar-row">
+            <label class="avatar-picker" title="Story avatar">
+              ${avatarPreview ? html`<img src=${avatarPreview} alt="" />` : '+'}
+              <input type="file" accept="image/*" onChange=${pickStoryAvatar} />
+            </label>
+            <label class="field grow"><span>Story title</span>
+              <input type="text" placeholder="Optional" value=${title} onInput=${ (e) => setTitle(e.currentTarget.value) } /></label>
           </div>
-          <hr>
           <div class="grid-2">
-            <label class="field"><span>Character name</span><input type="text" placeholder="Ilyra" value=${form.name} onInput=${set('name')} /></label>
-            <label class="field"><span>Avatar (emoji)</span><input type="text" maxlength="4" placeholder="🜁" value=${form.avatar} onInput=${set('avatar')} /></label>
+            <label class="field"><span>Your name</span>
+              <input type="text" placeholder="The player" value=${personaName} onInput=${ (e) => setPersonaName(e.currentTarget.value) } /></label>
+            <label class="field"><span>Your description</span>
+              <input type="text" placeholder="A wandering cartographer" value=${personaDesc} onInput=${ (e) => setPersonaDesc(e.currentTarget.value) } /></label>
           </div>
-          <label class="field"><span>Description</span><textarea rows="2" placeholder="An archivist who guards a drowned library." value=${form.description} onInput=${set('description')}></textarea></label>
-          <label class="field"><span>Personality</span><textarea rows="2" placeholder="Dry, patient, secretly sentimental." value=${form.personality} onInput=${set('personality')}></textarea></label>
-          <label class="field"><span>Scenario</span><textarea rows="2" placeholder="The player washed ashore during a storm." value=${form.scenario} onInput=${set('scenario')}></textarea></label>
-          <label class="field"><span>Opening message</span><textarea rows="2" placeholder="Leave blank to let the agent open the scene." value=${form.greeting} onInput=${set('greeting')}></textarea></label>
+          <hr />
+          <div>
+            <div class="row" style="justify-content:space-between;align-items:center">
+              <strong>Cast</strong>
+              <button class="btn btn-ghost btn-sm" type="button"
+                      onClick=${ () => setCharacters((cur) => cur.concat([newCharacter()])) }>+ Add character</button>
+            </div>
+            ${characters.map((c, i) => html`
+              <div key=${c.key} style="margin-top:10px">
+                <${CharacterEditor} character=${c} index=${i} sessionId=${''}
+                  onChange=${update} onRemove=${remove} canRemove=${characters.length > 1} />
+              </div>`)}
+          </div>
+          <label class="field"><span>Opening message (optional)</span>
+            <textarea rows="2" placeholder="Leave blank to let the agent open the scene."
+                      value=${greeting} onInput=${ (e) => setGreeting(e.currentTarget.value) }></textarea></label>
+          <div class="grid-2">
+            <label class="field"><span>Model</span>
+              <input type="text" list="model-options" value=${model} onInput=${ (e) => setModel(e.currentTarget.value) } /></label>
+            <ReasoningSelect value=${reasoningEffort} onChange=${setReasoningEffort} />
+          </div>
+          <label class="switch">
+            <input type="checkbox" checked=${choicesEnabled}
+                   onChange=${ (e) => setChoicesEnabled(e.currentTarget.checked) } />
+            Require the choices tool at the end of every turn
+          </label>
         </div>
         <footer class="modal-foot">
           <button class="btn btn-ghost" type="button" onClick=${onClose}>Cancel</button>
-          <button class="btn btn-primary" type="button" onClick=${create}>Create</button>
+          <button class="btn btn-primary" type="button" disabled=${busy} onClick=${create}>${busy ? 'Working…' : 'Create'}</button>
+        </footer>
+      </div>
+    </div>`;
+}
+
+export function CastModal({ session, onClose, onSave }) {
+  const [title, setTitle] = useState((session && session.title) || '');
+  const [avatar, setAvatar] = useState((session && session.avatar) || '');
+  const [avatarFile, setAvatarFile] = useState(null);
+  const [avatarPreview, setAvatarPreview] = useState('');
+  const [characters, setCharacters] = useState(() => ((session && session.characters) || []).map((c) => ({
+    key: 'c' + Math.random().toString(36).slice(2),
+    id: c.id || '', name: c.name || '', description: c.description || '',
+    personality: c.personality || '', avatar: c.avatar || '', avatarFile: null, avatarPreview: '',
+  })));
+  const [busy, setBusy] = useState(false);
+
+  const update = (index, patch) => setCharacters((cur) => cur.map((c, i) => (i === index ? { ...c, ...patch } : c)));
+  const remove = (index) => setCharacters((cur) => cur.filter((_, i) => i !== index));
+  const pickStoryAvatar = (e) => {
+    const file = e.currentTarget.files && e.currentTarget.files[0];
+    if (file) {
+      setAvatarFile(file);
+      setAvatarPreview(URL.createObjectURL(file));
+    }
+  };
+  const save = async () => {
+    setBusy(true);
+    try {
+      await onSave({ title, avatar, avatarFile, characters });
+    } finally {
+      setBusy(false);
+    }
+  };
+  const src = avatarPreview || (avatar && session ? assetURL(session.id, avatar) : '');
+  return html`
+    <div class="modal" onClick=${ (e) => { if (e.target === e.currentTarget) onClose(); } }>
+      <div class="modal-card">
+        <header class="modal-head"><h2>Edit cast</h2>
+          <button class="icon-btn" type="button" onClick=${onClose}>×</button></header>
+        <div class="modal-body">
+          <div class="story-avatar-row">
+            <label class="avatar-picker" title="Story avatar">
+              ${src ? html`<img src=${src} alt="" />` : '+'}
+              <input type="file" accept="image/*" onChange=${pickStoryAvatar} />
+            </label>
+            <label class="field grow"><span>Story title</span>
+              <input type="text" value=${title} onInput=${ (e) => setTitle(e.currentTarget.value) } /></label>
+          </div>
+          <div>
+            <div class="row" style="justify-content:space-between;align-items:center">
+              <strong>Cast</strong>
+              <button class="btn btn-ghost btn-sm" type="button"
+                      onClick=${ () => setCharacters((cur) => cur.concat([{
+                        key: 'c' + Math.random().toString(36).slice(2), id: '', name: '', description: '',
+                        personality: '', avatar: '', avatarFile: null, avatarPreview: '',
+                      }])) }>+ Add character</button>
+            </div>
+            ${characters.map((c, i) => html`
+              <div key=${c.key} style="margin-top:10px">
+                <${CharacterEditor} character=${c} index=${i} sessionId=${session ? session.id : ''}
+                  onChange=${update} onRemove=${remove} canRemove=${characters.length > 1} />
+              </div>`)}
+          </div>
+        </div>
+        <footer class="modal-foot">
+          <button class="btn btn-ghost" type="button" onClick=${onClose}>Cancel</button>
+          <button class="btn btn-primary" type="button" disabled=${busy} onClick=${save}>${busy ? 'Saving…' : 'Save'}</button>
         </footer>
       </div>
     </div>`;
@@ -377,12 +567,10 @@ export function NewStoryModal({ onClose, onCreate }) {
 
 export function ToolsModal({ tools, onClose }) {
   return html`
-    <div class="modal" onClick=${(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div class="modal" onClick=${ (e) => { if (e.target === e.currentTarget) onClose(); } }>
       <div class="modal-card">
-        <header class="modal-head">
-          <h2>Registered tools</h2>
-          <button class="icon-btn" type="button" onClick=${onClose}>×</button>
-        </header>
+        <header class="modal-head"><h2>Registered tools</h2>
+          <button class="icon-btn" type="button" onClick=${onClose}>×</button></header>
         <div class="modal-body">
           <div class="tools-list">
             ${!tools.length

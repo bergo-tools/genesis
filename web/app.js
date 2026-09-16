@@ -1,7 +1,7 @@
 import { h, Fragment, render } from './vendor/preact.module.js';
 import { useCallback, useEffect, useRef, useState } from './vendor/hooks.module.js';
 import htm from './vendor/htm.module.js';
-import { api } from './api.js';
+import { api, uploadAsset } from './api.js';
 import * as C from './components.js';
 
 const html = htm.bind(h);
@@ -16,6 +16,7 @@ export function App() {
   const [choices, setChoices] = useState([]);
   const [usage, setUsage] = useState(null);
   const [streaming, setStreaming] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [modal, setModal] = useState(null);
   const [tools, setTools] = useState([]);
   const [toasts, setToasts] = useState([]);
@@ -82,22 +83,6 @@ export function App() {
       case 'message':
         setSession((s) => (s ? { ...s, messages: [...s.messages, event.message] } : s));
         break;
-      case 'scene':
-        setSession((s) => (s ? { ...s, scene: event.scene } : s));
-        break;
-      case 'character':
-        setSession((s) => {
-          if (!s) return s;
-          const chars = (s.characters || []).slice();
-          const idx = chars.findIndex((c) => c.id === event.character.id || c.name === event.character.name);
-          if (idx >= 0) chars[idx] = event.character;
-          else chars.push(event.character);
-          return { ...s, characters: chars };
-        });
-        break;
-      case 'memory':
-        setSession((s) => (s ? { ...s, memories: [...(s.memories || []), event.memory] } : s));
-        break;
       case 'state':
         setSession((s) => (s ? { ...s, state: event.state } : s));
         break;
@@ -105,11 +90,11 @@ export function App() {
         setChoices(event.choices || []);
         break;
       case 'reasoning':
-        setActivity((list) => [...list, { id: 'think-' + list.length + '-' + Date.now(), name: 'think', done: true, result: event.text }]);
+        setActivity((list) => [...list, { id: 'reason-' + list.length + '-' + Date.now(), name: 'reasoning', done: true, result: event.text }]);
         break;
       case 'tool_start':
         setActivity((list) => [...list, {
-          id: event.tool.id || event.tool.name + '-' + Date.now(),
+          id: event.tool.id || (event.tool.name + '-' + Date.now()),
           name: event.tool.name,
           args: event.tool.args ? JSON.stringify(event.tool.args, null, 2) : '',
           done: false,
@@ -164,23 +149,63 @@ export function App() {
     }
   }, [handleEvent, pushToast, refreshSessions]);
 
-  const send = useCallback(async (text) => {
-    const value = String(text || '').trim();
+  const send = useCallback(async (text, files) => {
     const current = sessionRef.current;
-    if (!value || !current) return;
+    const value = String(text || '').trim();
+    const picked = files || [];
+    if (!current || (!value && !picked.length)) return;
     const pending = {
       id: 'pending-' + Date.now(),
       role: 'user',
       kind: 'user',
       speaker: (current.persona && current.persona.name) || '',
       text: value,
+      localImages: picked.map((file) => URL.createObjectURL(file)),
       pending: true,
       createdAt: new Date().toISOString(),
     };
     setSession((s) => (s ? { ...s, messages: [...s.messages, pending] } : s));
     setChoices([]);
-    await runStream('/api/sessions/' + current.id + '/messages', { text: value });
+    try {
+      const names = [];
+      if (picked.length) {
+        setUploading(true);
+        for (const file of picked) {
+          const up = await uploadAsset(current.id, file);
+          names.push(up.name);
+        }
+      }
+      await runStream('/api/sessions/' + current.id + '/messages', { text: value, images: names });
+    } catch (err) {
+      pushToast(err.message, 'error');
+    } finally {
+      setUploading(false);
+    }
+  }, [runStream, pushToast]);
+
+  const reroll = useCallback(async () => {
+    const current = sessionRef.current;
+    if (!current) return;
+    setSession((s) => {
+      if (!s) return s;
+      const msgs = s.messages.slice();
+      let idx = -1;
+      for (let i = msgs.length - 1; i >= 0; i--) {
+        if (msgs[i].kind === 'user') {
+          idx = i;
+          break;
+        }
+      }
+      return { ...s, messages: idx >= 0 ? msgs.slice(0, idx + 1) : [] };
+    });
+    setChoices([]);
+    setActivity([]);
+    await runStream('/api/sessions/' + current.id + '/regenerate', {});
   }, [runStream]);
+
+  const stop = useCallback(() => {
+    if (abortRef.current) abortRef.current.abort();
+  }, []);
 
   const saveConfig = useCallback(async (body) => {
     try {
@@ -202,26 +227,87 @@ export function App() {
     }
   }, [pushToast]);
 
-  const createStory = useCallback(async (body) => {
+  const createStory = useCallback(async (data) => {
     try {
-      const created = await api.createSession(body);
+      const chars = (data.characters || []).filter((c) => (c.name || '').trim());
+      const created = await api.createSession({
+        title: data.title,
+        model: data.model,
+        persona: { name: data.personaName, description: data.personaDesc },
+        characters: chars.map((c) => ({ name: c.name, description: c.description, personality: c.personality })),
+        greeting: data.greeting,
+        settings: { choicesEnabled: data.choicesEnabled, reasoningEffort: data.reasoningEffort },
+      });
+      let changed = false;
+      const characters = [];
+      const createdChars = created.characters || [];
+      for (let i = 0; i < createdChars.length; i++) {
+        const c = createdChars[i];
+        const src = chars[i] || {};
+        let avatar = '';
+        if (src.avatarFile) {
+          const up = await uploadAsset(created.id, src.avatarFile);
+          avatar = up.name;
+          changed = true;
+        }
+        characters.push({ id: c.id, name: c.name, description: c.description, personality: c.personality, avatar });
+      }
+      let storyAvatar = '';
+      if (data.avatarFile) {
+        const up = await uploadAsset(created.id, data.avatarFile);
+        storyAvatar = up.name;
+        changed = true;
+      }
+      let result = created;
+      if (changed) {
+        result = await api.patchSession(created.id, { avatar: storyAvatar, characters });
+      }
       setModal(null);
-      setSession(created);
+      setSession(result);
       setActivity([]);
       setChoices([]);
       setUsage(null);
       setStatus(null);
-      localStorage.setItem(LS_KEY, created.id);
+      localStorage.setItem(LS_KEY, result.id);
       setSidebarOpen(false);
       setPanelOpen(false);
       await refreshSessions();
-      if (!created.messages || !created.messages.length) {
-        await runStream('/api/sessions/' + created.id + '/opening', {});
+      if (!result.messages || !result.messages.length) {
+        await runStream('/api/sessions/' + result.id + '/opening', {});
       }
     } catch (err) {
       pushToast(err.message, 'error');
     }
   }, [pushToast, refreshSessions, runStream]);
+
+  const saveCast = useCallback(async (data) => {
+    const current = sessionRef.current;
+    if (!current) return;
+    try {
+      const characters = [];
+      for (const c of data.characters || []) {
+        const name = (c.name || '').trim();
+        if (!name) continue;
+        let avatar = c.avatar || '';
+        if (c.avatarFile) {
+          const up = await uploadAsset(current.id, c.avatarFile);
+          avatar = up.name;
+        }
+        characters.push({ id: c.id, name, description: c.description, personality: c.personality, avatar });
+      }
+      let avatar = data.avatar || '';
+      if (data.avatarFile) {
+        const up = await uploadAsset(current.id, data.avatarFile);
+        avatar = up.name;
+      }
+      const updated = await api.patchSession(current.id, { title: data.title, avatar, characters });
+      setSession(updated);
+      setModal(null);
+      await refreshSessions();
+    } catch (err) {
+      pushToast(err.message, 'error');
+    }
+  }, [pushToast, refreshSessions]);
 
   const openTools = useCallback(async () => {
     setModal('tools');
@@ -245,7 +331,7 @@ export function App() {
   const deleteCurrent = useCallback(async () => {
     const current = sessionRef.current;
     if (!current) return;
-    if (!window.confirm('Delete this story? This cannot be undone.')) return;
+    if (!window.confirm('Delete this story and all of its images? This cannot be undone.')) return;
     try {
       await api.deleteSession(current.id);
       setSession(null);
@@ -301,6 +387,8 @@ export function App() {
     setSidebarOpen(false);
     setPanelOpen(false);
   };
+  const messages = (session && session.messages) || [];
+  const canReroll = !streaming && messages.length > 0 && messages[messages.length - 1].kind !== 'user';
 
   return html`
     <${Fragment}>
@@ -313,8 +401,7 @@ export function App() {
         onSettings=${openSettings}
         onTools=${openTools}
       />
-      ${(sidebarOpen || panelOpen) && html`
-        <div class="scrim" onClick=${closeDrawers}></div>`}
+      ${(sidebarOpen || panelOpen) && html`<div class="scrim" onClick=${closeDrawers}></div>`}
       <main class="main">
         <${C.Topbar}
           session=${session}
@@ -322,15 +409,18 @@ export function App() {
           onMenu=${() => setSidebarOpen((v) => !v)}
           onPanel=${() => setPanelOpen((v) => !v)}
         />
-        <${C.SceneBar} scene=${session && session.scene} />
         <${C.MessageList} session=${session} streaming=${streaming} onNewStory=${() => setModal('new')} />
         <${C.StatusBar} status=${status && status.status} step=${status && status.step} />
-        <${C.Choices} choices=${choices} onChoose=${send} />
+        <${C.Choices} choices=${choices} onChoose=${ (text) => send(text, []) } />
         <${C.Composer}
           streaming=${streaming}
+          uploading=${uploading}
           disabled=${!session}
+          hasChoices=${choices.length > 0}
+          canReroll=${canReroll}
           onSend=${send}
-          onStop=${() => { if (abortRef.current) abortRef.current.abort(); }}
+          onStop=${stop}
+          onReroll=${reroll}
         />
       </main>
       <${C.Panel}
@@ -338,16 +428,14 @@ export function App() {
         activity=${activity}
         open=${panelOpen}
         onClose=${() => setPanelOpen(false)}
+        onEditCast=${() => setModal('cast')}
       />
       ${modal === 'settings' && html`
-        <${C.SettingsModal}
-          config=${config}
-          onClose=${() => setModal(null)}
-          onSave=${saveConfig}
-          onLoadModels=${loadModels}
-        />`}
+        <${C.SettingsModal} config=${config} onClose=${() => setModal(null)} onSave=${saveConfig} onLoadModels=${loadModels} />`}
       ${modal === 'new' && html`
-        <${C.NewStoryModal} onClose=${() => setModal(null)} onCreate=${createStory} />`}
+        <${C.NewStoryModal} config=${config} onClose=${() => setModal(null)} onCreate=${createStory} />`}
+      ${modal === 'cast' && session && html`
+        <${C.CastModal} session=${session} onClose=${() => setModal(null)} onSave=${saveCast} />`}
       ${modal === 'tools' && html`
         <${C.ToolsModal} tools=${tools} onClose=${() => setModal(null)} />`}
       <${C.Toasts} toasts=${toasts} />

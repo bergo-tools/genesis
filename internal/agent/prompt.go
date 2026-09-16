@@ -3,46 +3,54 @@ package agent
 import (
 	"encoding/json"
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/zp/genesis/internal/store"
 )
 
-const agentPreamble = `You are Genesis, an agentic roleplay engine and game master. You run an
-immersive, ongoing story. You portray every non-player character and narrate
-the world around the player.
+// agentPreamble is the fixed role instruction. It is intentionally explicit
+// about the tool-only protocol.
+const agentPreamble = `You are Genesis, an agentic roleplay game master. You run an immersive,
+ongoing story with the player. You portray every character in the cast and
+narrate the world around the player.
 
-# Non-negotiable protocol
-1. You never reply with plain text. Every response is one or more tool calls.
-2. Use send_message for everything the player should read: speech, action,
-   narration, inner thoughts, or out-of-character notes. Choose the type field
-   accordingly. Call it several times to produce several beats.
-3. Use the world tools (set_scene, update_character, update_state, remember)
-   whenever the fiction changes. Keep the world state accurate and current.
-4. Use the information tools (roll, recall, get_state) before committing to an
-   uncertain outcome. Never invent a dice result or a memory.
-5. End every turn with await_player when the player must act, or end_turn when
-   the scene simply continues. Anything after these is never seen.
-6. Never narrate or decide the player's actions, words, or thoughts.
+# Output protocol
+You never reply with plain text. Every response is one or more tool calls.
+- message: speak or narrate to the player. Use the exact character name in
+  speaker, and kind speech, action or narration. Call it several times to build
+  a scene beat by beat.
+- think: a character's private inner thought. Keep it in that character's
+  voice; it is shown to the player as a dimmed bubble.
+- update_state: persist durable facts (inventory, stats, flags, promises,
+  relationship values, scene facts). This is the only memory that survives.
+- choices: finish the turn by offering the player the next branches.
 
-# Style
-- Stay in character at all times and honour every character card.
-- Match the language the player uses. If the player writes Chinese, write in
-  Chinese; otherwise use the language of the scene.
-- Keep each send_message focused: one to three sentences, under ~120 words.
-- Show, do not tell. Use concrete sensory detail and subtext.
-- Advance the scene every turn: add a beat, a complication, or a real choice.
+# Craft
+- Stay in character and honour every character card.
+- Match the language the player writes in.
+- Show, do not tell: sensory detail, subtext, consequences.
+- Never decide the player's actions, words, or thoughts.
+- Keep each message short: one to three sentences.
 `
 
-// SystemPrompt assembles the full system instruction for a session.
+// SystemPrompt assembles the full system instruction for a story.
 func (a *Agent) SystemPrompt(sess *store.Session) string {
 	var b strings.Builder
 	b.WriteString(agentPreamble)
 
 	b.WriteString("\n# Tools you may call\n")
 	for _, t := range a.registry.All() {
-		fmt.Fprintf(&b, "- %s (category: %s): %s\n", t.Name, t.Category, t.Description)
+		fmt.Fprintf(&b, "- %s: %s\n", t.Name, t.Description)
+	}
+
+	if sess.Settings.ChoicesEnabled {
+		b.WriteString("\n# Ending the turn (mandatory)\n")
+		b.WriteString("Every turn MUST end with the choices tool. After your message and think calls, call " +
+			"choices with the scene's next branches. Never return plain text and never stop without it.\n")
+	} else {
+		b.WriteString("\n# Ending the turn\n")
+		b.WriteString("When the scene has been told, stop calling tools. The choices tool is optional here; " +
+			"use it only when presenting a decision would help.\n")
 	}
 
 	cfg := a.config()
@@ -52,7 +60,7 @@ func (a *Agent) SystemPrompt(sess *store.Session) string {
 		b.WriteString("\n")
 	}
 	if extra := strings.TrimSpace(sess.Settings.SystemPrompt); extra != "" {
-		b.WriteString("\n# Session instructions\n")
+		b.WriteString("\n# Story instructions\n")
 		b.WriteString(extra)
 		b.WriteString("\n")
 	}
@@ -68,9 +76,9 @@ func (a *Agent) SystemPrompt(sess *store.Session) string {
 		b.WriteString("- A silent protagonist; let them define themselves through play.\n")
 	}
 
-	b.WriteString("\n# Characters you portray\n")
+	b.WriteString("\n# Cast (portray all of them)\n")
 	if len(sess.Characters) == 0 {
-		b.WriteString("- None defined yet. Invent fitting characters as the scene needs.\n")
+		b.WriteString("- No characters defined. Invent fitting ones as the scene needs.\n")
 	}
 	for _, c := range sess.Characters {
 		if c == nil {
@@ -83,22 +91,7 @@ func (a *Agent) SystemPrompt(sess *store.Session) string {
 		if c.Personality != "" {
 			fmt.Fprintf(&b, "- Personality: %s\n", c.Personality)
 		}
-		if c.Appearance != "" {
-			fmt.Fprintf(&b, "- Appearance: %s\n", c.Appearance)
-		}
-		if c.Scenario != "" {
-			fmt.Fprintf(&b, "- Scenario: %s\n", c.Scenario)
-		}
-		if len(c.Tags) > 0 {
-			fmt.Fprintf(&b, "- Tags: %s\n", strings.Join(c.Tags, ", "))
-		}
-		if len(c.State) > 0 {
-			fmt.Fprintf(&b, "- Current state: %s\n", mustJSON(c.State))
-		}
 	}
-
-	b.WriteString("\n# Scene\n")
-	writeScene(&b, sess.Scene)
 
 	b.WriteString("\n# World state\n")
 	if len(sess.State) > 0 {
@@ -108,56 +101,7 @@ func (a *Agent) SystemPrompt(sess *store.Session) string {
 		b.WriteString("{}\n")
 	}
 
-	if mem := topMemories(sess.Memories, 16); len(mem) > 0 {
-		b.WriteString("\n# Long-term memory\n")
-		for _, m := range mem {
-			fmt.Fprintf(&b, "- (importance %d) %s\n", m.Importance, m.Content)
-		}
-	}
-
 	return b.String()
-}
-
-func writeScene(b *strings.Builder, s store.Scene) {
-	wrote := false
-	for _, f := range []struct {
-		label string
-		value string
-	}{
-		{"Location", s.Location},
-		{"Time", s.Time},
-		{"Weather", s.Weather},
-		{"Background", s.Background},
-		{"Notes", s.Notes},
-	} {
-		if strings.TrimSpace(f.value) == "" {
-			continue
-		}
-		fmt.Fprintf(b, "- %s: %s\n", f.label, f.value)
-		wrote = true
-	}
-	if !wrote {
-		b.WriteString("- Not yet established.\n")
-	}
-}
-
-func topMemories(mems []*store.Memory, limit int) []*store.Memory {
-	out := make([]*store.Memory, 0, len(mems))
-	for _, m := range mems {
-		if m != nil && strings.TrimSpace(m.Content) != "" {
-			out = append(out, m)
-		}
-	}
-	sort.SliceStable(out, func(i, j int) bool {
-		if out[i].Importance != out[j].Importance {
-			return out[i].Importance > out[j].Importance
-		}
-		return out[i].CreatedAt.After(out[j].CreatedAt)
-	})
-	if len(out) > limit {
-		out = out[:limit]
-	}
-	return out
 }
 
 func mustJSON(v any) string {

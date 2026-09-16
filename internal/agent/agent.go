@@ -1,20 +1,33 @@
 package agent
 
 import (
-	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/zp/genesis/internal/llm"
 	"github.com/zp/genesis/internal/store"
 )
 
-const maxHistoryMessages = 80
+const (
+	maxHistoryMessages = 80
+	maxReminders       = 2
+)
 
-// Config carries default generation settings, overridable per session.
+const (
+	choicesReminder = "[system] You ended the turn without calling the choices tool. Choices are " +
+		"enabled, so you MUST finish with the choices tool before stopping. Call it now with the " +
+		"player's next two to four options."
+	messageReminder = "[system] You have not shown the player anything yet. Use the message tool to " +
+		"speak or narrate, then finish the turn with the choices tool."
+)
+
+// Config carries default generation settings, overridable per story.
 type Config struct {
 	Model             string
 	Temperature       float64
@@ -23,6 +36,7 @@ type Config struct {
 	ToolChoice        string
 	SystemPrompt      string
 	ParallelToolCalls bool
+	ReasoningEffort   string
 }
 
 // Agent runs the tool-calling loop that drives every roleplay turn.
@@ -34,7 +48,7 @@ type Agent struct {
 }
 
 // New wires an agent together. client and config are functions so that
-// configuration changes (API key, model) take effect without a restart.
+// configuration changes take effect without a restart.
 func New(st *store.Store, reg *Registry, client func() (llm.Client, error), cfg func() Config) *Agent {
 	return &Agent{store: st, registry: reg, client: client, config: cfg}
 }
@@ -42,8 +56,8 @@ func New(st *store.Store, reg *Registry, client func() (llm.Client, error), cfg 
 // Registry exposes the tool registry.
 func (a *Agent) Registry() *Registry { return a.registry }
 
-// Continue runs the agent until a terminal tool fires or the step budget runs
-// out. It mutates sess in place; the caller is responsible for persisting it.
+// Continue runs the agent until the choices tool fires, the model stops, or
+// the step budget is exhausted. It mutates sess in place; the caller persists.
 func (a *Agent) Continue(ctx context.Context, sess *store.Session, emit func(Event)) error {
 	if sess == nil {
 		return errors.New("agent: nil session")
@@ -79,6 +93,15 @@ func (a *Agent) Continue(ctx context.Context, sess *store.Session, emit func(Eve
 	if maxTokens <= 0 {
 		maxTokens = cfg.MaxTokens
 	}
+	reasoning := strings.TrimSpace(sess.Settings.ReasoningEffort)
+	if reasoning == "" {
+		reasoning = cfg.ReasoningEffort
+	}
+	choicesEnabled := sess.Settings.ChoicesEnabled
+
+	turnPlayerFacing := false
+	turnChoices := false
+	reminders := 0
 
 	for step := 1; step <= steps; step++ {
 		if err := ctx.Err(); err != nil {
@@ -94,6 +117,7 @@ func (a *Agent) Continue(ctx context.Context, sess *store.Session, emit func(Eve
 			Temperature:       temp,
 			MaxTokens:         maxTokens,
 			ParallelToolCalls: cfg.ParallelToolCalls,
+			ReasoningEffort:   reasoning,
 		})
 		if err != nil {
 			return err
@@ -108,10 +132,9 @@ func (a *Agent) Continue(ctx context.Context, sess *store.Session, emit func(Eve
 			emit(Event{Type: EventReasoning, Step: step, Text: resp.Reasoning})
 		}
 
+		tc := &TurnContext{Session: sess, Emit: emit, Step: step}
+
 		if len(resp.ToolCalls) == 0 {
-			// The model broke protocol. Salvage any visible text so the user
-			// still gets a reply, then stop.
-			tc := &TurnContext{Session: sess, Emit: emit, Step: step}
 			if txt := strings.TrimSpace(resp.Content); txt != "" {
 				tc.Show(&store.Message{
 					Role:    llm.RoleAssistant,
@@ -121,7 +144,24 @@ func (a *Agent) Continue(ctx context.Context, sess *store.Session, emit func(Eve
 				})
 				sess.History = append(sess.History, llm.Message{Role: llm.RoleAssistant, Content: resp.Content})
 			}
-			emit(Event{Type: EventNotice, Step: step, Text: "The model returned text instead of a tool call. Try a stronger tool-calling model or set tool choice to required."})
+			turnPlayerFacing = turnPlayerFacing || tc.PlayerFacing
+
+			if choicesEnabled && !turnChoices {
+				if reminders < maxReminders {
+					reminders++
+					appendReminder(sess, choicesReminder)
+					continue
+				}
+				emit(Event{Type: EventNotice, Step: step, Text: "The model stopped before offering choices; ending the turn."})
+				break
+			}
+			if !turnPlayerFacing {
+				if reminders < maxReminders {
+					reminders++
+					appendReminder(sess, messageReminder)
+					continue
+				}
+			}
 			break
 		}
 
@@ -132,19 +172,40 @@ func (a *Agent) Continue(ctx context.Context, sess *store.Session, emit func(Eve
 			ToolCalls: resp.ToolCalls,
 		})
 
-		tc := &TurnContext{Session: sess, Emit: emit, Step: step}
 		terminal := false
 		for _, call := range resp.ToolCalls {
+			if call.Name == "choices" {
+				tc.ChoicesOffered = true
+			}
 			a.executeTool(ctx, tc, call)
 			if tool, ok := a.registry.Get(call.Name); ok && tool.Terminal {
 				terminal = true
 			}
 		}
-		if terminal {
+		turnPlayerFacing = turnPlayerFacing || tc.PlayerFacing
+		turnChoices = turnChoices || tc.ChoicesOffered
+
+		if terminal || turnChoices {
+			break
+		}
+		if choicesEnabled {
+			if reminders < maxReminders {
+				reminders++
+				appendReminder(sess, choicesReminder)
+				continue
+			}
+			emit(Event{Type: EventNotice, Step: step, Text: "The model did not call choices; ending the turn."})
 			break
 		}
 	}
 	return nil
+}
+
+func appendReminder(sess *store.Session, text string) {
+	if sess == nil {
+		return
+	}
+	sess.History = append(sess.History, llm.Message{Role: llm.RoleUser, Content: text})
 }
 
 func (a *Agent) executeTool(ctx context.Context, tc *TurnContext, call llm.ToolCall) {
@@ -183,10 +244,13 @@ func (a *Agent) executeTool(ctx context.Context, tc *TurnContext, call llm.ToolC
 	if tc.Emit != nil {
 		tc.Emit(Event{Type: EventToolEnd, Step: tc.Step, Tool: ev})
 	}
-
-	toolMsg := llm.Message{Role: llm.RoleTool, ToolCallID: call.ID, Name: call.Name, Content: string(resultJSON)}
 	if json.Valid(resultJSON) {
-		tc.Session.History = append(tc.Session.History, toolMsg)
+		tc.Session.History = append(tc.Session.History, llm.Message{
+			Role:       llm.RoleTool,
+			ToolCallID: call.ID,
+			Name:       call.Name,
+			Content:    string(resultJSON),
+		})
 	}
 }
 
@@ -194,8 +258,60 @@ func (a *Agent) buildMessages(sess *store.Session) []llm.Message {
 	history := trimHistory(sess.History, maxHistoryMessages)
 	msgs := make([]llm.Message, 0, len(history)+1)
 	msgs = append(msgs, llm.Message{Role: llm.RoleSystem, Content: a.SystemPrompt(sess)})
-	msgs = append(msgs, history...)
+	for _, m := range history {
+		if m.Role == llm.RoleUser && len(m.Images) > 0 {
+			cp := m
+			cp.Images = a.resolveImages(sess.ID, m.Images)
+			msgs = append(msgs, cp)
+			continue
+		}
+		msgs = append(msgs, m)
+	}
 	return msgs
+}
+
+// resolveImages turns stored asset names into data URLs for the provider.
+func (a *Agent) resolveImages(storyID string, images []llm.Image) []llm.Image {
+	if a.store == nil {
+		return nil
+	}
+	out := make([]llm.Image, 0, len(images))
+	for _, img := range images {
+		if strings.TrimSpace(img.DataURL) != "" {
+			out = append(out, img)
+			continue
+		}
+		name := strings.TrimSpace(img.Name)
+		if name == "" {
+			continue
+		}
+		path, err := a.store.AssetPath(storyID, name)
+		if err != nil {
+			continue
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		out = append(out, llm.Image{
+			Name:    name,
+			DataURL: "data:" + mimeForExt(filepath.Ext(name)) + ";base64," + base64.StdEncoding.EncodeToString(data),
+		})
+	}
+	return out
+}
+
+func mimeForExt(ext string) string {
+	switch strings.ToLower(ext) {
+	case ".png":
+		return "image/png"
+	case ".gif":
+		return "image/gif"
+	case ".webp":
+		return "image/webp"
+	default:
+		return "image/jpeg"
+	}
 }
 
 // trimHistory keeps the newest messages without orphaning tool results that
@@ -209,15 +325,4 @@ func trimHistory(h []llm.Message, max int) []llm.Message {
 		start++
 	}
 	return h[start:]
-}
-
-// parseArgs unmarshals tool arguments, tolerating empty input.
-func parseArgs(raw json.RawMessage, dst any) error {
-	raw = bytes.TrimSpace(raw)
-	if len(raw) == 0 {
-		return nil
-	}
-	dec := json.NewDecoder(bytes.NewReader(raw))
-	dec.UseNumber()
-	return dec.Decode(dst)
 }

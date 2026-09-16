@@ -56,6 +56,14 @@ func newTestAgent(t *testing.T, client llm.Client) *Agent {
 			return map[string]any{"ok": true}, nil
 		},
 	})
+	reg.Register(&Tool{
+		Name: "choices", Description: "choices", Category: "flow", Terminal: true,
+		Handler: func(_ context.Context, tc *TurnContext, _ json.RawMessage) (any, error) {
+			tc.ChoicesOffered = true
+			tc.Show(&store.Message{Role: llm.RoleAssistant, Kind: store.KindPrompt, Speaker: "Tester", Text: "choose"})
+			return map[string]any{"ok": true}, nil
+		},
+	})
 	return New(st, reg, func() (llm.Client, error) { return client, nil }, func() Config {
 		return Config{ToolChoice: "auto", MaxSteps: 5, Temperature: 1, MaxTokens: 256, ParallelToolCalls: true}
 	})
@@ -113,19 +121,11 @@ func TestContinueFallsBackToPlainText(t *testing.T) {
 	if err := a.store.Create(sess); err != nil {
 		t.Fatal(err)
 	}
-	var notice bool
-	if err := a.Continue(context.Background(), sess, func(e Event) {
-		if e.Type == EventNotice {
-			notice = true
-		}
-	}); err != nil {
+	if err := a.Continue(context.Background(), sess, func(Event) {}); err != nil {
 		t.Fatal(err)
 	}
 	if len(sess.Messages) != 1 || sess.Messages[0].Kind != store.KindNarration {
 		t.Fatalf("expected salvaged narration, got %+v", sess.Messages)
-	}
-	if !notice {
-		t.Fatal("expected a protocol notice event")
 	}
 }
 
@@ -179,5 +179,50 @@ func TestRegistryDefsOrderAndMeta(t *testing.T) {
 	meta := reg.Meta()
 	if meta[0].Parameters == nil {
 		t.Fatal("missing default parameters schema")
+	}
+}
+
+func TestChoicesEnforcementNudges(t *testing.T) {
+	client := &fakeClient{responses: []*llm.Response{
+		{ToolCalls: []llm.ToolCall{{ID: "1", Name: "say", Arguments: `{"text":"hello"}`}}},
+		{ToolCalls: []llm.ToolCall{{ID: "2", Name: "choices", Arguments: "{}"}}},
+	}}
+	a := newTestAgent(t, client)
+	sess := &store.Session{ID: "abc", Settings: store.Settings{ChoicesEnabled: true, MaxSteps: 5}}
+	if err := a.store.Create(sess); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Continue(context.Background(), sess, func(Event) {}); err != nil {
+		t.Fatal(err)
+	}
+	if client.index != 2 {
+		t.Fatalf("expected 2 completions, got %d", client.index)
+	}
+	var reminded bool
+	for _, m := range sess.History {
+		if m.Role == llm.RoleUser && strings.Contains(m.Content, "choices tool") {
+			reminded = true
+		}
+	}
+	if !reminded {
+		t.Fatalf("expected a choices reminder in history: %+v", sess.History)
+	}
+}
+
+func TestChoicesDisabledEndsWithoutNudge(t *testing.T) {
+	client := &fakeClient{responses: []*llm.Response{
+		{ToolCalls: []llm.ToolCall{{ID: "1", Name: "say", Arguments: `{"text":"done"}`}}},
+		{Content: "the end"},
+	}}
+	a := newTestAgent(t, client)
+	sess := &store.Session{ID: "abc", Settings: store.Settings{ChoicesEnabled: false, MaxSteps: 5}}
+	if err := a.store.Create(sess); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Continue(context.Background(), sess, func(Event) {}); err != nil {
+		t.Fatal(err)
+	}
+	if client.index != 2 {
+		t.Fatalf("expected 2 completions, got %d", client.index)
 	}
 }

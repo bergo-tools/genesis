@@ -2,18 +2,12 @@ package tools
 
 import "github.com/zp/genesis/internal/agent"
 
-// RegisterBuiltins adds every builtin tool to the registry.
+// RegisterBuiltins adds the builtin tools. Genesis keeps this set deliberately
+// small: narration, inner monologue, persistent state, and the turn-ending
+// choice prompt.
 func RegisterBuiltins(r *agent.Registry) {
-	r.Register(sendMessageTool())
+	r.Register(messageTool())
 	r.Register(thinkTool())
-	r.Register(setSceneTool())
-	r.Register(updateCharacterTool())
 	r.Register(updateStateTool())
-	r.Register(getStateTool())
-	r.Register(rememberTool())
-	r.Register(recallTool())
-	r.Register(rollTool())
-	r.Register(offerChoicesTool())
-	r.Register(awaitPlayerTool())
-	r.Register(endTurnTool())
+	r.Register(choicesTool())
 }

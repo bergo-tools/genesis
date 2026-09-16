@@ -12,9 +12,6 @@ import (
 const (
 	EventStatus      = "status"
 	EventMessage     = "message"
-	EventScene       = "scene"
-	EventCharacter   = "character"
-	EventMemory      = "memory"
 	EventState       = "state"
 	EventChoices     = "choices"
 	EventToolStart   = "tool_start"
@@ -39,21 +36,18 @@ type ToolEvent struct {
 
 // Event is one streamed update from the agent.
 type Event struct {
-	Type      string           `json:"type"`
-	Step      int              `json:"step,omitempty"`
-	Status    string           `json:"status,omitempty"`
-	Text      string           `json:"text,omitempty"`
-	Title     string           `json:"title,omitempty"`
-	Message   *store.Message   `json:"message,omitempty"`
-	Scene     *store.Scene     `json:"scene,omitempty"`
-	Character *store.Character `json:"character,omitempty"`
-	Memory    *store.Memory    `json:"memory,omitempty"`
-	State     map[string]any   `json:"state,omitempty"`
-	Choices   []store.Choice   `json:"choices,omitempty"`
-	Prompt    string           `json:"prompt,omitempty"`
-	Tool      *ToolEvent       `json:"tool,omitempty"`
-	Usage     *llm.Usage       `json:"usage,omitempty"`
-	Error     string           `json:"error,omitempty"`
+	Type    string         `json:"type"`
+	Step    int            `json:"step,omitempty"`
+	Status  string         `json:"status,omitempty"`
+	Text    string         `json:"text,omitempty"`
+	Title   string         `json:"title,omitempty"`
+	Message *store.Message `json:"message,omitempty"`
+	State   map[string]any `json:"state,omitempty"`
+	Choices []store.Choice `json:"choices,omitempty"`
+	Prompt  string         `json:"prompt,omitempty"`
+	Tool    *ToolEvent     `json:"tool,omitempty"`
+	Usage   *llm.Usage     `json:"usage,omitempty"`
+	Error   string         `json:"error,omitempty"`
 }
 
 // TurnContext is handed to every tool handler for the duration of a turn.
@@ -61,9 +55,15 @@ type TurnContext struct {
 	Session *store.Session
 	Emit    func(Event)
 	Step    int
+
+	// PlayerFacing is set when a tool shows the player something other than a
+	// private thought, i.e. speech, action, narration or a choice prompt.
+	PlayerFacing bool
+	// ChoicesOffered is set when the choices tool runs.
+	ChoicesOffered bool
 }
 
-// AddMessage appends a display message to the session, assigning id/time.
+// AddMessage appends a display message to the story, assigning id/time.
 func (tc *TurnContext) AddMessage(m *store.Message) {
 	if tc == nil || tc.Session == nil || m == nil {
 		return
@@ -85,6 +85,9 @@ func (tc *TurnContext) Show(m *store.Message) {
 	tc.AddMessage(m)
 	if tc.Emit != nil {
 		tc.Emit(Event{Type: EventMessage, Step: tc.Step, Message: m})
+	}
+	if m != nil && m.Role == "assistant" && m.Kind != store.KindThought && m.Kind != store.KindState {
+		tc.PlayerFacing = true
 	}
 }
 

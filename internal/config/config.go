@@ -24,6 +24,8 @@ type Config struct {
 	ToolChoice        string  `json:"toolChoice"`
 	SystemPrompt      string  `json:"systemPrompt"`
 	ParallelToolCalls bool    `json:"parallelToolCalls"`
+	ReasoningEffort   string  `json:"reasoningEffort"`
+	ChoicesEnabled    bool    `json:"choicesEnabled"`
 }
 
 // Default returns the built-in defaults.
@@ -35,9 +37,11 @@ func Default() Config {
 		DataDir:           ".",
 		Temperature:       1.0,
 		MaxTokens:         2048,
-		MaxSteps:          8,
+		MaxSteps:          6,
 		ToolChoice:        "auto",
 		ParallelToolCalls: true,
+		ReasoningEffort:   "off",
+		ChoicesEnabled:    true,
 	}
 }
 
@@ -63,6 +67,9 @@ func (c *Config) normalize() {
 	}
 	if strings.TrimSpace(c.ToolChoice) == "" {
 		c.ToolChoice = d.ToolChoice
+	}
+	if strings.TrimSpace(c.ReasoningEffort) == "" {
+		c.ReasoningEffort = d.ReasoningEffort
 	}
 }
 
@@ -110,6 +117,9 @@ func applyEnv(c *Config) {
 	}
 	if v := os.Getenv("GENESIS_DATA_DIR"); v != "" {
 		c.DataDir = v
+	}
+	if v := os.Getenv("GENESIS_REASONING_EFFORT"); v != "" {
+		c.ReasoningEffort = v
 	}
 }
 
@@ -172,6 +182,8 @@ func (s *Store) Public() map[string]any {
 		"toolChoice":        c.ToolChoice,
 		"systemPrompt":      c.SystemPrompt,
 		"parallelToolCalls": c.ParallelToolCalls,
+		"reasoningEffort":   c.ReasoningEffort,
+		"choicesEnabled":    c.ChoicesEnabled,
 	}
 }
 

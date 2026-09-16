@@ -1,8 +1,13 @@
 package store
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
 
-func TestSessionRoundTrip(t *testing.T) {
+func TestStoryRoundTrip(t *testing.T) {
 	st, err := New(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -10,7 +15,7 @@ func TestSessionRoundTrip(t *testing.T) {
 	sess := &Session{
 		ID:         "abc123",
 		Title:      "A test",
-		Characters: []*Character{{ID: "c1", Name: "Ilyra"}},
+		Characters: []*Character{{ID: "c1", Name: "Ilyra"}, {ID: "c2", Name: "Bram"}},
 		State:      map[string]any{"gold": 3},
 		Messages:   []*Message{{ID: "m1", Role: "user", Kind: KindUser, Text: "hello"}},
 	}
@@ -24,6 +29,9 @@ func TestSessionRoundTrip(t *testing.T) {
 	if got.Title != "A test" || got.State["gold"] != float64(3) {
 		t.Fatalf("unexpected round trip: %+v", got)
 	}
+	if names := got.CharacterNames(); len(names) != 2 || names[1] != "Bram" {
+		t.Fatalf("unexpected cast: %+v", names)
+	}
 	list, err := st.List()
 	if err != nil || len(list) != 1 {
 		t.Fatalf("list failed: %v %+v", err, list)
@@ -31,17 +39,46 @@ func TestSessionRoundTrip(t *testing.T) {
 	if c := got.FindCharacter("ilyra"); c == nil {
 		t.Fatal("FindCharacter should match case-insensitively")
 	}
-	if err := st.Delete("abc123"); err != nil {
+}
+
+func TestStoryLivesInItsOwnDirectory(t *testing.T) {
+	root := t.TempDir()
+	st, err := New(root)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := st.Get("abc123"); err != ErrNotFound {
-		t.Fatalf("expected ErrNotFound, got %v", err)
+	if err := st.Create(&Session{ID: "s1", Title: "T"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "s1", "story.json")); err != nil {
+		t.Fatalf("story.json should live under its own directory: %v", err)
+	}
+	name, err := st.SaveAsset("s1", strings.NewReader("fake-png-bytes"), ".png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := st.OpenAsset("s1", name)
+	if err != nil {
+		t.Fatalf("open asset: %v", err)
+	}
+	f.Close()
+	if _, err := st.SaveAsset("s1", strings.NewReader("x"), ".svg"); err == nil {
+		t.Fatal("svg uploads should be rejected")
+	}
+	if err := st.Delete("s1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "s1")); !os.IsNotExist(err) {
+		t.Fatal("deleting a story should remove its whole directory")
 	}
 }
 
-func TestValidIDRejectsTraversal(t *testing.T) {
+func TestPathTraversalRejected(t *testing.T) {
 	st, _ := New(t.TempDir())
 	if _, err := st.Get("../secret"); err != ErrNotFound {
 		t.Fatalf("expected ErrNotFound for traversal id, got %v", err)
+	}
+	if _, err := st.OpenAsset("s1", "../story.json"); err == nil {
+		t.Fatal("expected traversal asset name to be rejected")
 	}
 }

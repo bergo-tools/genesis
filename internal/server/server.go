@@ -59,6 +59,7 @@ func (s *Server) agentConfig() agent.Config {
 		ToolChoice:        c.ToolChoice,
 		SystemPrompt:      c.SystemPrompt,
 		ParallelToolCalls: c.ParallelToolCalls,
+		ReasoningEffort:   c.ReasoningEffort,
 	}
 }
 
@@ -78,6 +79,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/sessions/{id}/messages", s.handleMessage)
 	mux.HandleFunc("POST /api/sessions/{id}/opening", s.handleOpening)
 	mux.HandleFunc("POST /api/sessions/{id}/regenerate", s.handleRegenerate)
+	mux.HandleFunc("POST /api/sessions/{id}/assets", s.handleAssetUpload)
+	mux.HandleFunc("GET /api/sessions/{id}/assets/{name}", s.handleAssetGet)
 	mux.Handle("GET /", s.assets)
 	return s.withLogging(mux)
 }

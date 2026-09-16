@@ -9,76 +9,98 @@ import (
 	"github.com/zp/genesis/internal/store"
 )
 
-func TestParseNotation(t *testing.T) {
-	cases := []struct {
-		in           string
-		count, sides int
-		modifier     int
-		expectError  bool
-	}{
-		{"2d6+3", 2, 6, 3, false},
-		{"1d20", 1, 20, 0, false},
-		{"d8-2", 1, 8, -2, false},
-		{"4d10", 4, 10, 0, false},
-		{"", 0, 0, 0, true},
-		{"abc", 0, 0, 0, true},
-		{"0d6", 0, 0, 0, true},
-		{"2d1", 0, 0, 0, true},
+func TestMessageToolDefaultsAndKinds(t *testing.T) {
+	sess := &store.Session{Characters: []*store.Character{{ID: "c1", Name: "Ilyra"}}}
+	tc := &agent.TurnContext{Session: sess, Emit: func(agent.Event) {}}
+	tool := messageTool()
+
+	if _, err := tool.Handler(context.Background(), tc, json.RawMessage(`{"kind":"narration","text":"Rain."}`)); err != nil {
+		t.Fatal(err)
 	}
-	for _, c := range cases {
-		count, sides, mod, err := parseNotation(c.in)
-		if c.expectError {
-			if err == nil {
-				t.Fatalf("expected error for %q", c.in)
-			}
-			continue
-		}
-		if err != nil {
-			t.Fatalf("unexpected error for %q: %v", c.in, err)
-		}
-		if count != c.count || sides != c.sides || mod != c.modifier {
-			t.Fatalf("%q => %d,%d,%d want %d,%d,%d", c.in, count, sides, mod, c.count, c.sides, c.modifier)
-		}
+	if _, err := tool.Handler(context.Background(), tc, json.RawMessage(`{"text":"Hello."}`)); err != nil {
+		t.Fatal(err)
+	}
+	if len(sess.Messages) != 2 {
+		t.Fatalf("want 2 messages, got %d", len(sess.Messages))
+	}
+	if sess.Messages[0].Speaker != "Narrator" || sess.Messages[0].Kind != store.KindNarration {
+		t.Fatalf("bad narration: %+v", sess.Messages[0])
+	}
+	if sess.Messages[1].Speaker != "Ilyra" || sess.Messages[1].Kind != store.KindSpeech {
+		t.Fatalf("bad speech: %+v", sess.Messages[1])
+	}
+	if !tc.PlayerFacing {
+		t.Fatal("PlayerFacing should be set by the message tool")
+	}
+	if _, err := tool.Handler(context.Background(), tc, json.RawMessage(`{"text":"  "}`)); err == nil {
+		t.Fatal("expected error for empty text")
 	}
 }
 
-func TestUpdateStateToolMutatesSession(t *testing.T) {
+func TestThinkIsPrivate(t *testing.T) {
+	sess := &store.Session{}
+	tc := &agent.TurnContext{Session: sess, Emit: func(agent.Event) {}}
+	if _, err := thinkTool().Handler(context.Background(), tc, json.RawMessage(`{"text":"hm"}`)); err != nil {
+		t.Fatal(err)
+	}
+	if tc.PlayerFacing {
+		t.Fatal("think must not count as player facing")
+	}
+	if len(sess.Messages) != 1 || sess.Messages[0].Kind != store.KindThought {
+		t.Fatalf("bad thought: %+v", sess.Messages)
+	}
+}
+
+func TestChoicesTool(t *testing.T) {
+	tool := choicesTool()
+	if !tool.Terminal {
+		t.Fatal("choices must be terminal")
+	}
+	sess := &store.Session{}
+	var got []store.Choice
+	tc := &agent.TurnContext{Session: sess, Emit: func(e agent.Event) {
+		if e.Type == agent.EventChoices {
+			got = e.Choices
+		}
+	}}
+	_, err := tool.Handler(context.Background(), tc, json.RawMessage(
+		`{"narration":"The door creaks.","choices":[{"text":"Go in"},{"text":"Wait"}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("want 2 choices, got %d", len(got))
+	}
+	if len(sess.Messages) != 1 || sess.Messages[0].Kind != store.KindNarration {
+		t.Fatalf("bad narration message: %+v", sess.Messages)
+	}
+	if !tc.ChoicesOffered {
+		t.Fatal("ChoicesOffered should be set")
+	}
+	if _, err := tool.Handler(context.Background(), tc, json.RawMessage(`{"choices":[]}`)); err == nil {
+		t.Fatal("expected error for empty choices")
+	}
+}
+
+func TestUpdateStateTool(t *testing.T) {
 	sess := &store.Session{State: map[string]any{}}
 	tc := &agent.TurnContext{Session: sess, Emit: func(agent.Event) {}}
 	tool := updateStateTool()
-
 	call := func(args string) {
 		t.Helper()
 		if _, err := tool.Handler(context.Background(), tc, json.RawMessage(args)); err != nil {
-			t.Fatalf("handler error: %v", err)
+			t.Fatalf("handler error for %s: %v", args, err)
 		}
 	}
 	call(`{"path":"inventory.gold","op":"set","value":10}`)
 	call(`{"path":"inventory.gold","op":"add","value":5}`)
-	call(`{"path":"flags.visited","op":"toggle"}`)
+	call(`{"path":"flags.seen","op":"toggle"}`)
 
-	if got, _ := getPath(sess.State, "inventory.gold"); toFloatOrZero(got) != 15 {
-		t.Fatalf("gold = %v, want 15", got)
+	if v, _ := getPath(sess.State, "inventory.gold"); toFloatOrZero(v) != 15 {
+		t.Fatalf("gold = %v, want 15", v)
 	}
-	if got, _ := getPath(sess.State, "flags.visited"); got != true {
-		t.Fatalf("visited = %v, want true", got)
-	}
-}
-
-func TestSendMessageToolEmits(t *testing.T) {
-	sess := &store.Session{}
-	var shown []*store.Message
-	tc := &agent.TurnContext{Session: sess, Emit: func(e agent.Event) {
-		if e.Type == agent.EventMessage {
-			shown = append(shown, e.Message)
-		}
-	}}
-	tool := sendMessageTool()
-	if _, err := tool.Handler(context.Background(), tc, json.RawMessage(`{"type":"narration","text":"The tide rises."}`)); err != nil {
-		t.Fatal(err)
-	}
-	if len(shown) != 1 || shown[0].Kind != store.KindNarration || shown[0].Speaker != "Narrator" {
-		t.Fatalf("unexpected message: %+v", shown)
+	if v, _ := getPath(sess.State, "flags.seen"); v != true {
+		t.Fatalf("seen = %v, want true", v)
 	}
 }
 

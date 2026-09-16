@@ -59,7 +59,7 @@ func main() {
 	}
 
 	c := cfg.Get()
-	sessions, err := store.New(filepath.Join(c.DataDir, "llm_sessions"))
+	sessions, err := store.New(filepath.Join(c.DataDir, "stories"))
 	if err != nil {
 		log.Fatalf("store: %v", err)
 	}

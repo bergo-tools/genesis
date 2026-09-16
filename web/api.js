@@ -13,6 +13,23 @@ async function toJSON(res) {
   return res.json();
 }
 
+// assetURL builds the browser URL for an uploaded image.
+export function assetURL(sessionId, name) {
+  if (!sessionId || !name) return '';
+  return '/api/sessions/' + encodeURIComponent(sessionId) + '/assets/' + encodeURIComponent(name);
+}
+
+// uploadAsset posts a File to a story and resolves to { name, url }.
+export async function uploadAsset(sessionId, file) {
+  const form = new FormData();
+  form.append('file', file, file.name || 'upload');
+  const res = await fetch('/api/sessions/' + encodeURIComponent(sessionId) + '/assets', {
+    method: 'POST',
+    body: form,
+  });
+  return toJSON(res);
+}
+
 export const api = {
   config: () => fetch('/api/config').then(toJSON),
   saveConfig: (c) => fetch('/api/config', { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(c) }).then(toJSON),
@@ -23,6 +40,7 @@ export const api = {
   session: (id) => fetch('/api/sessions/' + encodeURIComponent(id)).then(toJSON),
   patchSession: (id, body) => fetch('/api/sessions/' + encodeURIComponent(id), { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(body) }).then(toJSON),
   deleteSession: (id) => fetch('/api/sessions/' + encodeURIComponent(id), { method: 'DELETE' }).then(toJSON),
+  uploadAsset,
   stream: streamNDJSON,
 };
 

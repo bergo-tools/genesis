@@ -1,6 +1,5 @@
-// Package tools implements the builtin tool set. Registering a new capability
-// is a single agent.Registry.Register call, which is what keeps Genesis easy to
-// extend.
+// Package tools implements the builtin tool set. Registering a capability is a
+// single agent.Registry.Register call, which keeps Genesis easy to extend.
 package tools
 
 import (
@@ -25,10 +24,6 @@ func stringProp(desc string) map[string]any {
 
 func intProp(desc string) map[string]any {
 	return map[string]any{"type": "integer", "description": desc}
-}
-
-func numberProp(desc string) map[string]any {
-	return map[string]any{"type": "number", "description": desc}
 }
 
 func boolProp(desc string) map[string]any {

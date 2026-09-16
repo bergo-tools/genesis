@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -33,6 +34,8 @@ func (s *Server) handlePutConfig(w http.ResponseWriter, r *http.Request) {
 		ToolChoice        *string  `json:"toolChoice"`
 		SystemPrompt      *string  `json:"systemPrompt"`
 		ParallelToolCalls *bool    `json:"parallelToolCalls"`
+		ReasoningEffort   *string  `json:"reasoningEffort"`
+		ChoicesEnabled    *bool    `json:"choicesEnabled"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, err)
@@ -70,6 +73,12 @@ func (s *Server) handlePutConfig(w http.ResponseWriter, r *http.Request) {
 		}
 		if body.ParallelToolCalls != nil {
 			c.ParallelToolCalls = *body.ParallelToolCalls
+		}
+		if body.ReasoningEffort != nil {
+			c.ReasoningEffort = strings.TrimSpace(*body.ReasoningEffort)
+		}
+		if body.ChoicesEnabled != nil {
+			c.ChoicesEnabled = *body.ChoicesEnabled
 		}
 	})
 	if err != nil {
@@ -136,6 +145,71 @@ func (s *Server) handleTools(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"tools": s.registry.Meta()})
 }
 
+// settingsInput distinguishes "absent" from a zero value.
+type settingsInput struct {
+	Temperature     *float64 `json:"temperature"`
+	MaxTokens       *int     `json:"maxTokens"`
+	MaxSteps        *int     `json:"maxSteps"`
+	ToolChoice      *string  `json:"toolChoice"`
+	SystemPrompt    *string  `json:"systemPrompt"`
+	ReasoningEffort *string  `json:"reasoningEffort"`
+	ChoicesEnabled  *bool    `json:"choicesEnabled"`
+}
+
+func applySettings(dst *store.Settings, in *settingsInput) {
+	if dst == nil || in == nil {
+		return
+	}
+	if in.Temperature != nil && *in.Temperature > 0 {
+		dst.Temperature = *in.Temperature
+	}
+	if in.MaxTokens != nil && *in.MaxTokens > 0 {
+		dst.MaxTokens = *in.MaxTokens
+	}
+	if in.MaxSteps != nil && *in.MaxSteps > 0 {
+		dst.MaxSteps = *in.MaxSteps
+	}
+	if in.ToolChoice != nil && strings.TrimSpace(*in.ToolChoice) != "" {
+		dst.ToolChoice = strings.TrimSpace(*in.ToolChoice)
+	}
+	if in.SystemPrompt != nil {
+		dst.SystemPrompt = *in.SystemPrompt
+	}
+	if in.ReasoningEffort != nil {
+		dst.ReasoningEffort = strings.TrimSpace(*in.ReasoningEffort)
+	}
+	if in.ChoicesEnabled != nil {
+		dst.ChoicesEnabled = *in.ChoicesEnabled
+	}
+}
+
+type characterInput struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Personality string `json:"personality"`
+	Avatar      string `json:"avatar"`
+}
+
+func toCharacter(in characterInput) *store.Character {
+	name := strings.TrimSpace(in.Name)
+	if name == "" {
+		return nil
+	}
+	id := strings.TrimSpace(in.ID)
+	if id == "" {
+		id = store.NewID()
+	}
+	return &store.Character{
+		ID:          id,
+		Name:        name,
+		Description: strings.TrimSpace(in.Description),
+		Personality: strings.TrimSpace(in.Personality),
+		Avatar:      strings.TrimSpace(in.Avatar),
+		CreatedAt:   time.Now().UTC(),
+	}
+}
+
 func (s *Server) handleListSessions(w http.ResponseWriter, _ *http.Request) {
 	sessions, err := s.store.List()
 	if err != nil {
@@ -147,8 +221,9 @@ func (s *Server) handleListSessions(w http.ResponseWriter, _ *http.Request) {
 		out = append(out, map[string]any{
 			"id":           sess.ID,
 			"title":        sessionTitle(sess),
+			"avatar":       sess.Avatar,
 			"model":        sess.Model,
-			"character":    firstCharacterName(sess),
+			"characters":   sess.CharacterNames(),
 			"messageCount": len(sess.Messages),
 			"createdAt":    sess.CreatedAt,
 			"updatedAt":    sess.UpdatedAt,
@@ -159,20 +234,13 @@ func (s *Server) handleListSessions(w http.ResponseWriter, _ *http.Request) {
 
 func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Title     string         `json:"title"`
-		Model     string         `json:"model"`
-		Persona   *store.Persona `json:"persona"`
-		Character struct {
-			Name        string   `json:"name"`
-			Description string   `json:"description"`
-			Personality string   `json:"personality"`
-			Scenario    string   `json:"scenario"`
-			Appearance  string   `json:"appearance"`
-			Avatar      string   `json:"avatar"`
-			Greeting    string   `json:"greeting"`
-			Tags        []string `json:"tags"`
-		} `json:"character"`
-		Settings *store.Settings `json:"settings"`
+		Title      string           `json:"title"`
+		Avatar     string           `json:"avatar"`
+		Model      string           `json:"model"`
+		Persona    *store.Persona   `json:"persona"`
+		Characters []characterInput `json:"characters"`
+		Greeting   string           `json:"greeting"`
+		Settings   *settingsInput   `json:"settings"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, err)
@@ -180,48 +248,41 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 	}
 	cfg := s.cfg.Get()
 	sess := &store.Session{
-		Title: strings.TrimSpace(body.Title),
-		Model: strings.TrimSpace(body.Model),
+		Title:  strings.TrimSpace(body.Title),
+		Avatar: strings.TrimSpace(body.Avatar),
+		Model:  strings.TrimSpace(body.Model),
 		Settings: store.Settings{
-			Temperature: cfg.Temperature,
-			MaxTokens:   cfg.MaxTokens,
-			MaxSteps:    cfg.MaxSteps,
-			ToolChoice:  cfg.ToolChoice,
+			Temperature:     cfg.Temperature,
+			MaxTokens:       cfg.MaxTokens,
+			MaxSteps:        cfg.MaxSteps,
+			ToolChoice:      cfg.ToolChoice,
+			ReasoningEffort: cfg.ReasoningEffort,
+			ChoicesEnabled:  cfg.ChoicesEnabled,
 		},
 		State: map[string]any{},
 	}
 	if body.Persona != nil {
 		sess.Persona = *body.Persona
 	}
-	if body.Settings != nil {
-		mergeSettings(&sess.Settings, body.Settings)
+	for _, in := range body.Characters {
+		if c := toCharacter(in); c != nil {
+			sess.Characters = append(sess.Characters, c)
+		}
 	}
-	if name := strings.TrimSpace(body.Character.Name); name != "" || strings.TrimSpace(body.Character.Description) != "" {
-		if name == "" {
-			name = "Character"
-		}
-		c := &store.Character{
-			ID:          store.NewID(),
-			Name:        name,
-			Description: strings.TrimSpace(body.Character.Description),
-			Personality: strings.TrimSpace(body.Character.Personality),
-			Scenario:    strings.TrimSpace(body.Character.Scenario),
-			Appearance:  strings.TrimSpace(body.Character.Appearance),
-			Avatar:      strings.TrimSpace(body.Character.Avatar),
-			Tags:        body.Character.Tags,
-			State:       map[string]any{},
-			CreatedAt:   time.Now().UTC(),
-		}
-		sess.Characters = append(sess.Characters, c)
-		g := strings.TrimSpace(body.Character.Greeting)
-		if g == "" {
-			g = defaultGreeting(c)
+	applySettings(&sess.Settings, body.Settings)
+
+	if g := strings.TrimSpace(body.Greeting); g != "" {
+		speaker := "Narrator"
+		if len(sess.Characters) > 0 {
+			speaker = sess.Characters[0].Name
 		}
 		sess.Messages = append(sess.Messages, &store.Message{
-			ID: store.NewID(), Role: "assistant", Kind: store.KindSpeech, Speaker: c.Name, Text: g, CreatedAt: time.Now().UTC(),
+			ID: store.NewID(), Role: "assistant", Kind: store.KindSpeech,
+			Speaker: speaker, Text: g, CreatedAt: time.Now().UTC(),
 		})
 		sess.History = append(sess.History, llm.Message{Role: llm.RoleAssistant, Content: g})
 	}
+
 	if err := s.store.Create(sess); err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
@@ -232,39 +293,31 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleGetSession(w http.ResponseWriter, r *http.Request) {
 	sess, err := s.store.Get(r.PathValue("id"))
 	if err != nil {
-		status := http.StatusInternalServerError
-		if errors.Is(err, store.ErrNotFound) {
-			status = http.StatusNotFound
-		}
-		writeError(w, status, err)
+		writeError(w, statusFor(err), err)
 		return
 	}
 	writeJSON(w, http.StatusOK, sess.Public())
 }
 
 func (s *Server) handlePatchSession(w http.ResponseWriter, r *http.Request) {
-	lock := s.store.TurnLock(r.PathValue("id"))
+	id := r.PathValue("id")
+	lock := s.store.TurnLock(id)
 	lock.Lock()
 	defer lock.Unlock()
 
-	sess, err := s.store.Get(r.PathValue("id"))
+	sess, err := s.store.Get(id)
 	if err != nil {
-		status := http.StatusInternalServerError
-		if errors.Is(err, store.ErrNotFound) {
-			status = http.StatusNotFound
-		}
-		writeError(w, status, err)
+		writeError(w, statusFor(err), err)
 		return
 	}
 	var body struct {
-		Title      *string            `json:"title"`
-		Model      *string            `json:"model"`
-		Persona    *store.Persona     `json:"persona"`
-		Scene      *store.Scene       `json:"scene"`
-		Settings   *store.Settings    `json:"settings"`
-		State      map[string]any     `json:"state"`
-		Characters []*store.Character `json:"characters"`
-		Memories   []*store.Memory    `json:"memories"`
+		Title      *string          `json:"title"`
+		Avatar     *string          `json:"avatar"`
+		Model      *string          `json:"model"`
+		Persona    *store.Persona   `json:"persona"`
+		Characters []characterInput `json:"characters"`
+		State      map[string]any   `json:"state"`
+		Settings   *settingsInput   `json:"settings"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, err)
@@ -273,27 +326,28 @@ func (s *Server) handlePatchSession(w http.ResponseWriter, r *http.Request) {
 	if body.Title != nil {
 		sess.Title = strings.TrimSpace(*body.Title)
 	}
+	if body.Avatar != nil {
+		sess.Avatar = strings.TrimSpace(*body.Avatar)
+	}
 	if body.Model != nil {
 		sess.Model = strings.TrimSpace(*body.Model)
 	}
 	if body.Persona != nil {
 		sess.Persona = *body.Persona
 	}
-	if body.Scene != nil {
-		sess.Scene = *body.Scene
-	}
-	if body.Settings != nil {
-		mergeSettings(&sess.Settings, body.Settings)
-	}
 	if body.State != nil {
 		sess.State = body.State
 	}
 	if body.Characters != nil {
-		sess.Characters = body.Characters
+		chars := make([]*store.Character, 0, len(body.Characters))
+		for _, in := range body.Characters {
+			if c := toCharacter(in); c != nil {
+				chars = append(chars, c)
+			}
+		}
+		sess.Characters = chars
 	}
-	if body.Memories != nil {
-		sess.Memories = body.Memories
-	}
+	applySettings(&sess.Settings, body.Settings)
 	if err := s.store.Save(sess); err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
@@ -303,11 +357,7 @@ func (s *Server) handlePatchSession(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleDeleteSession(w http.ResponseWriter, r *http.Request) {
 	if err := s.store.Delete(r.PathValue("id")); err != nil {
-		status := http.StatusInternalServerError
-		if errors.Is(err, store.ErrNotFound) {
-			status = http.StatusNotFound
-		}
-		writeError(w, status, err)
+		writeError(w, statusFor(err), err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
@@ -316,15 +366,17 @@ func (s *Server) handleDeleteSession(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleMessage(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var body struct {
-		Text string `json:"text"`
+		Text   string   `json:"text"`
+		Images []string `json:"images"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
 	text := strings.TrimSpace(body.Text)
-	if text == "" {
-		writeError(w, http.StatusBadRequest, errors.New("text is required"))
+	images := cleanAssetNames(body.Images)
+	if text == "" && len(images) == 0 {
+		writeError(w, http.StatusBadRequest, errors.New("text or images are required"))
 		return
 	}
 
@@ -334,24 +386,20 @@ func (s *Server) handleMessage(w http.ResponseWriter, r *http.Request) {
 
 	sess, err := s.store.Get(id)
 	if err != nil {
-		status := http.StatusInternalServerError
-		if errors.Is(err, store.ErrNotFound) {
-			status = http.StatusNotFound
-		}
-		writeError(w, status, err)
+		writeError(w, statusFor(err), err)
 		return
 	}
 
 	user := &store.Message{
 		ID: store.NewID(), Role: "user", Kind: store.KindUser,
-		Speaker: sess.Persona.Name, Text: text, CreatedAt: time.Now().UTC(),
+		Speaker: sess.Persona.Name, Text: text, Images: images, CreatedAt: time.Now().UTC(),
 	}
 	sess.Messages = append(sess.Messages, user)
-	sess.History = append(sess.History, llm.Message{Role: llm.RoleUser, Content: text})
+	sess.History = append(sess.History, llm.Message{Role: llm.RoleUser, Content: text, Images: assetImages(images)})
 
 	title := ""
 	if strings.TrimSpace(sess.Title) == "" {
-		sess.Title = deriveTitle(text)
+		sess.Title = deriveTitle(firstNonEmpty(text, "A picture"))
 		title = sess.Title
 	}
 	if err := s.store.Save(sess); err != nil {
@@ -369,16 +417,13 @@ func (s *Server) handleOpening(w http.ResponseWriter, r *http.Request) {
 
 	sess, err := s.store.Get(id)
 	if err != nil {
-		status := http.StatusInternalServerError
-		if errors.Is(err, store.ErrNotFound) {
-			status = http.StatusNotFound
-		}
-		writeError(w, status, err)
+		writeError(w, statusFor(err), err)
 		return
 	}
 	sess.History = append(sess.History, llm.Message{
-		Role:    llm.RoleUser,
-		Content: "Begin the story now. Establish the scene with set_scene, introduce the characters with send_message, then stop and let the player act.",
+		Role: llm.RoleUser,
+		Content: "[system] Begin the story now. Establish the scene with message, give the cast " +
+			"something to react to, then finish with the choices tool.",
 	})
 	if err := s.store.Save(sess); err != nil {
 		writeError(w, http.StatusInternalServerError, err)
@@ -395,11 +440,7 @@ func (s *Server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 
 	sess, err := s.store.Get(id)
 	if err != nil {
-		status := http.StatusInternalServerError
-		if errors.Is(err, store.ErrNotFound) {
-			status = http.StatusNotFound
-		}
-		writeError(w, status, err)
+		writeError(w, statusFor(err), err)
 		return
 	}
 	truncateLastTurn(sess)
@@ -408,6 +449,87 @@ func (s *Server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.streamTurn(w, r, sess, nil, "")
+}
+
+func (s *Server) handleAssetUpload(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if _, err := s.store.Get(id); err != nil {
+		writeError(w, statusFor(err), err)
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, store.MaxAssetBytes+(1<<20))
+	if err := r.ParseMultipartForm(store.MaxAssetBytes + (1 << 20)); err != nil {
+		writeError(w, http.StatusBadRequest, errors.New("expected a multipart image upload"))
+		return
+	}
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, errors.New("missing form field \"file\""))
+		return
+	}
+	defer file.Close()
+	ext := strings.ToLower(filepath.Ext(header.Filename))
+	name, err := s.store.SaveAsset(id, file, ext)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"name": name,
+		"url":  "/api/sessions/" + id + "/assets/" + name,
+	})
+}
+
+func (s *Server) handleAssetGet(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	name := r.PathValue("name")
+	f, err := s.store.OpenAsset(id, name)
+	if err != nil {
+		writeError(w, statusFor(err), err)
+		return
+	}
+	defer f.Close()
+	w.Header().Set("Content-Type", mimeForAsset(name))
+	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.WriteHeader(http.StatusOK)
+	_, _ = io.Copy(w, f)
+}
+
+func mimeForAsset(name string) string {
+	switch strings.ToLower(filepath.Ext(name)) {
+	case ".png":
+		return "image/png"
+	case ".gif":
+		return "image/gif"
+	case ".webp":
+		return "image/webp"
+	default:
+		return "image/jpeg"
+	}
+}
+
+func cleanAssetNames(in []string) []string {
+	out := make([]string, 0, len(in))
+	for _, name := range in {
+		name = strings.TrimSpace(name)
+		if name == "" || strings.Contains(name, "..") || strings.ContainsAny(name, "/\\") {
+			continue
+		}
+		out = append(out, name)
+	}
+	return out
+}
+
+func assetImages(names []string) []llm.Image {
+	if len(names) == 0 {
+		return nil
+	}
+	out := make([]llm.Image, 0, len(names))
+	for _, n := range names {
+		out = append(out, llm.Image{Name: n})
+	}
+	return out
 }
 
 func truncateLastTurn(sess *store.Session) {
@@ -437,24 +559,6 @@ func truncateLastTurn(sess *store.Session) {
 	}
 }
 
-func mergeSettings(dst *store.Settings, src *store.Settings) {
-	if src.Temperature > 0 {
-		dst.Temperature = src.Temperature
-	}
-	if src.MaxTokens > 0 {
-		dst.MaxTokens = src.MaxTokens
-	}
-	if src.MaxSteps > 0 {
-		dst.MaxSteps = src.MaxSteps
-	}
-	if strings.TrimSpace(src.ToolChoice) != "" {
-		dst.ToolChoice = strings.TrimSpace(src.ToolChoice)
-	}
-	if strings.TrimSpace(src.SystemPrompt) != "" {
-		dst.SystemPrompt = src.SystemPrompt
-	}
-}
-
 func deriveTitle(text string) string {
 	text = strings.TrimSpace(strings.ReplaceAll(text, "\n", " "))
 	runes := []rune(text)
@@ -477,19 +581,18 @@ func sessionTitle(sess *store.Session) string {
 	return "Untitled"
 }
 
-func firstCharacterName(sess *store.Session) string {
-	if c := sess.PrimaryCharacter(); c != nil {
-		return c.Name
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if strings.TrimSpace(v) != "" {
+			return v
+		}
 	}
 	return ""
 }
 
-func defaultGreeting(c *store.Character) string {
-	if c == nil {
-		return ""
+func statusFor(err error) int {
+	if errors.Is(err, store.ErrNotFound) {
+		return http.StatusNotFound
 	}
-	if strings.TrimSpace(c.Scenario) != "" {
-		return c.Scenario
-	}
-	return fmt.Sprintf("*%s comes into view.*", c.Name)
+	return http.StatusInternalServerError
 }
