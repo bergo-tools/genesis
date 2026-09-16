@@ -432,6 +432,9 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
+	// A session snapshots its preset, so it must own the images it references
+	// instead of pointing at files that are deleted with the preset.
+	s.copyPresetAssets(sess.StoryID, sess)
 	writeJSON(w, http.StatusCreated, sess.Public())
 }
 
@@ -873,6 +876,44 @@ func defaultSettings(cfg config.Config) store.Settings {
 		ReasoningEffort: cfg.ReasoningEffort,
 		ChoicesEnabled:  cfg.ChoicesEnabled,
 		DisabledTools:   cfg.DisabledTools,
+	}
+}
+
+// copyPresetAssets copies the preset images a new session references (the story
+// avatar and the cast avatars) into the session's own assets directory. Sessions
+// snapshot their preset, so they must not depend on files that disappear when
+// the preset is deleted or its images are replaced.
+func (s *Server) copyPresetAssets(storyID string, sess *store.Session) {
+	if strings.TrimSpace(storyID) == "" || sess == nil {
+		return
+	}
+	names := make([]string, 0, len(sess.Characters)+1)
+	if name := strings.TrimSpace(sess.Avatar); name != "" {
+		names = append(names, name)
+	}
+	for _, c := range sess.Characters {
+		if c == nil {
+			continue
+		}
+		if name := strings.TrimSpace(c.Avatar); name != "" {
+			names = append(names, name)
+		}
+	}
+	for _, name := range names {
+		if s.store.AssetExists(sess.ID, name) {
+			continue
+		}
+		f, err := s.stories.OpenAsset(storyID, name)
+		if err != nil {
+			continue
+		}
+		data, err := io.ReadAll(io.LimitReader(f, store.MaxAssetBytes+1))
+		_ = f.Close()
+		if err != nil || len(data) == 0 || len(data) > store.MaxAssetBytes {
+			continue
+		}
+		// A failed copy is cosmetic; the session still works without an avatar.
+		_ = s.store.WriteAsset(sess.ID, name, data)
 	}
 }
 
