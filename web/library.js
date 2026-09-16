@@ -13,10 +13,12 @@ function preview(text, max) {
   return value.length > max ? value.slice(0, max) + '…' : value;
 }
 
-function StoryAvatar({ story, size }) {
+// StoryAvatar is always square-cropped: an unconstrained .avatar would let a
+// large upload render at its intrinsic size inside the preset lists.
+function StoryAvatar({ story, size = 40 }) {
   const src = story && story.avatar ? storyAssetURL(story.id, story.avatar) : '';
   return html`
-    <div class="avatar" style=${size ? ('width:' + size + 'px;height:' + size + 'px') : ''}>
+    <div class="avatar" style=${'width:' + size + 'px;height:' + size + 'px'}>
       ${src ? html`<img src=${src} alt="" />` : ((story && story.title) || '?').trim().charAt(0)}
     </div>`;
 }

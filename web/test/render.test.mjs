@@ -28,7 +28,7 @@ const tools = [
 const chatModels = [{ id: 'deepseek/deepseek-chat', name: 'DeepSeek', tools: true, context: 163840, maxOutput: 16000 }];
 const stories = [
   { id: 'emberfall', title: 'Emberfall', description: 'dark fantasy', genre: 'fantasy', characterCount: 3, builtin: true },
-  { id: 'custom1', title: 'Custom', description: 'mine', characterCount: 1 },
+  { id: 'custom1', title: 'Custom', description: 'mine', characterCount: 1, avatar: 'cover.png' },
 ];
 const session = {
   id: 's1',
@@ -76,7 +76,7 @@ const total = check('MessageList', chat, ['hello there', 'well met', '✎', '↻
   + check('App', app, ['Genesis', 'Begin a story', 'Create a story to start…', 'agentic roleplay'])
   + check('SettingsModal', settings, ['tool-toggles', 'toggle-row', 'picker-trigger', '<select'])
   + check('StoryModal', sessionSettings, ['tool-toggles', 'picker-trigger', '<select'])
-  + check('NewSessionModal', newSession, ['preset-card', 'New session', 'Emberfall'])
+  + check('NewSessionModal', newSession, ['preset-card', 'New session', 'Emberfall', 'width:40px;height:40px', '<img', 'custom1/assets/cover.png'])
   + check('StoriesModal', storiesModal, ['preset-list', 'preset-row', 'New preset', 'Start'])
   + check('PresetModal', preset, ['tool-toggles', 'picker-trigger', '<select'])
   + check('Login', login, ['login-screen', 'login-card', 'Password', 'Unlock'])
