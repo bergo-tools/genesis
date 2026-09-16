@@ -26,6 +26,8 @@ story 的 Story settings 里逐个开关。
 
 ## 特性
 
+- **登录鉴权**：在 `.env` 里设置 `GENESIS_PASSWORD` 后，进入 UI 需先输入密码；密码只从环境变量读取，
+  登录会话**只存在内存中**（进程重启即全部失效），连续输错会被短暂锁定。
 - **一切皆工具调用**：当前工具集为 message / scene / choices（`update_state` 暂缓，设计待定）。
 - **一段式消息**：`message` 的 text 与 thought 合并在同一个气泡里，内心想法用不同颜色与斜体区分。
 - **场景栏**：`scene` 维护地点/时间/天气/背景，顶部场景栏实时更新。
@@ -87,6 +89,7 @@ story 的 Story settings 里逐个开关。
 ```
 cmd/genesis/main.go          程序入口、flag、组装
 internal/config/             配置加载/保存、.env 解析
+internal/auth/               共享密码鉴权与内存会话
 internal/llm/                中立的 Chat/工具类型 + 多模态 + OpenRouter SDK 适配
 internal/store/              数据模型、按 story 分目录的持久化与资源存储
 internal/agent/              工具注册表、事件、agent 循环、system prompt
@@ -121,6 +124,17 @@ make build                  # 产物：dist/genesis
 `OPENROUTER_API_KEY`、`OPENROUTER_BASE_URL`、`GENESIS_MODEL`、`GENESIS_ADDR`、
 `GENESIS_DATA_DIR`、`GENESIS_REASONING_EFFORT`、`GENESIS_SPEECH_MODEL`、
 `GENESIS_SPEECH_VOICE`。环境变量优先于 `config.json`。
+
+### 登录鉴权
+
+设置 `GENESIS_PASSWORD`（推荐写在 `.env`）后，Web UI 需要先输入密码：
+
+- 密码只从环境变量读取，**不会写进 `config.json`**；留空或不设置则不启用鉴权（保持原有开放行为，启动日志会提示）。
+- 登录成功后下发 `genesis_session` cookie（`HttpOnly` + `SameSite=Lax`，HTTPS 下加 `Secure`）；
+  **会话只保存在内存中**，进程重启即全部失效，每次访问滑动续期（默认 30 天）。
+- 静态资源、`/api/auth/*` 与 `/api/health` 保持公开；其余 `/api/*` 未登录一律返回 401，
+  前端收到 401 会自动回到登录页。
+- 同一 IP 连续输错 5 次锁定 30 秒（返回 `429` + `Retry-After`）。
 
 ## 添加一个工具
 
@@ -170,6 +184,9 @@ func weatherTool() *agent.Tool {
 
 | 方法 & 路径 | 说明 |
 | --- | --- |
+| `GET /api/auth/status` | 是否启用鉴权、当前是否已登录（无需登录） |
+| `POST /api/auth/login` | 提交 `{password}`，成功后种下会话 cookie |
+| `POST /api/auth/logout` | 退出登录并作废内存中的会话 |
 | `GET/PUT /api/config` | 读取（key 脱敏）/ 保存配置 |
 | `GET /api/models` | 代理拉取文本模型列表（含 `tools` 标记，支持工具调用的排前面） |
 | `GET /api/tools` | 列出已注册工具及 schema |
@@ -227,8 +244,8 @@ func weatherTool() *agent.Tool {
 
 - **Preact 10 + htm**，以 **Vendor ESM**（`web/vendor/*.module.js`）提交，
   **没有 npm install、没有 bundler、没有构建步骤**；只把裸导入 `"preact"` 改成相对路径。
-- 模块划分：`api.js`（网络 + 资源上传 + NDJSON 流解析）、`format.js`（转义与轻量 markdown）、
-  `components.js`（纯展示组件与编辑器）、`app.js`（根组件、hooks 状态、流事件、`mount()`）。
+- 模块划分：`api.js`（网络 + 资源上传 + NDJSON 流解析 + 401 处理）、`format.js`（转义与轻量 markdown）、
+  `components.js`（纯展示组件与编辑器）、`login.js`（密码登录门）、`app.js`（根组件、hooks 状态、流事件、`mount()`）。
 - 图片选择、预览、上传在 `Composer`；多角色与头像编辑在 `NewStoryModal` / `CastModal`。
 - 无浏览器冒烟测试：`web/test/render.test.mjs` 用 vendored 的 `preact-render-to-string`
   渲染整棵组件树并校验文案，由 `make test-web` 运行。
@@ -243,7 +260,7 @@ make fmt      # gofmt
 make dev ARGS="-addr 127.0.0.1:8080"
 ```
 
-测试覆盖 agent 循环（工具执行、choices 强制提醒、终结、历史裁剪）、四个内置工具、
+测试覆盖 agent 循环（工具执行、choices 强制提醒、终结、历史裁剪）、三个内置工具、
 多模态与 reasoning 映射、按目录持久化与资源安全、以及前端组件树的 SSR 渲染。
 
 ### 本机 Go 环境

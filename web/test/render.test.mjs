@@ -7,6 +7,7 @@ import { App } from '../app.js';
 import { SettingsModal, MessageList } from '../components.js';
 import { StoryModal } from '../story.js';
 import { NewSessionModal, StoriesModal, PresetModal } from '../library.js';
+import { Login } from '../login.js';
 
 function check(name, out, needles) {
   const missing = needles.filter((needle) => !out.includes(needle));
@@ -41,12 +42,13 @@ const chat = renderToString(h(MessageList, {
   onReroll: () => {},
   onEdit: () => {},
 }));
-const app = renderToString(h(App, {}));
+const app = renderToString(h(App, { initialAuth: { enabled: false, authenticated: true } }));
 const settings = renderToString(h(SettingsModal, { config: {}, tools, chatModels, disabledTools: [] }));
 const sessionSettings = renderToString(h(StoryModal, { session, tools, chatModels, disabledTools: [] }));
 const newSession = renderToString(h(NewSessionModal, { stories }));
 const storiesModal = renderToString(h(StoriesModal, { stories }));
 const preset = renderToString(h(PresetModal, { story: null, config: {}, tools, chatModels }));
+const login = renderToString(h(Login, { onSuccess: () => {} }));
 
 const total = check('MessageList', chat, ['hello there', 'well met', '✎', '↻'])
   + check('App', app, ['Genesis', 'Begin a story', 'What do you do?', 'agentic roleplay'])
@@ -54,5 +56,6 @@ const total = check('MessageList', chat, ['hello there', 'well met', '✎', '↻
   + check('StoryModal', sessionSettings, ['tool-toggles', 'story-model-options', '<select'])
   + check('NewSessionModal', newSession, ['preset-card', 'New session', 'Emberfall'])
   + check('StoriesModal', storiesModal, ['preset-list', 'preset-row', 'New preset', 'Start'])
-  + check('PresetModal', preset, ['tool-toggles', 'preset-model-options', '<select']);
-console.log('web SSR smoke test OK (' + total + ' chars across 6 renders)');
+  + check('PresetModal', preset, ['tool-toggles', 'preset-model-options', '<select'])
+  + check('Login', login, ['login-screen', 'login-card', 'Password', 'Unlock']);
+console.log('web SSR smoke test OK (' + total + ' chars across 7 renders)');

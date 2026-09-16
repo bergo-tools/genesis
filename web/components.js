@@ -257,7 +257,7 @@ export function Composer({ streaming, disabled, uploading, hasChoices, onSend, o
     </footer>`;
 }
 
-export function Sidebar({ sessions, activeId, open, onOpen, onNew, onSettings, onTools, onStories, onDelete }) {
+export function Sidebar({ sessions, activeId, open, auth, onOpen, onNew, onSettings, onTools, onStories, onDelete, onLogout }) {
   return html`
     <aside class=${'sidebar' + (open ? ' open' : '')} aria-label="Stories">
       <div class="sidebar-head">
@@ -280,6 +280,8 @@ export function Sidebar({ sessions, activeId, open, onOpen, onNew, onSettings, o
         <button class="btn btn-ghost btn-sm" type="button" onClick=${onStories}>Stories</button>
         <button class="btn btn-ghost btn-sm" type="button" onClick=${onTools}>Tools</button>
         <button class="btn btn-ghost btn-sm" type="button" onClick=${onSettings}>Settings</button>
+        ${auth && auth.enabled && onLogout && html`
+          <button class="btn btn-ghost btn-sm" type="button" title="Sign out" onClick=${onLogout}>Log out</button>`}
       </div>
     </aside>`;
 }

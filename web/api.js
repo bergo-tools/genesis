@@ -1,4 +1,15 @@
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
+const AUTH_PREFIX = '/api/auth/';
+
+// onUnauthorized fires when the server rejects a request because the login
+// session is gone (expired, or the process restarted). The app uses it to show
+// the login screen again.
+let onUnauthorized = null;
+export function setUnauthorizedHandler(fn) { onUnauthorized = fn; }
+
+function noteUnauthorized(url, res) {
+  if (res.status === 401 && onUnauthorized && !url.startsWith(AUTH_PREFIX)) onUnauthorized();
+}
 
 async function toJSON(res) {
   if (!res.ok) {
@@ -11,6 +22,20 @@ async function toJSON(res) {
   }
   if (res.status === 204) return null;
   return res.json();
+}
+
+async function requestJSON(url, options) {
+  const res = await fetch(url, options);
+  noteUnauthorized(url, res);
+  return toJSON(res);
+}
+
+function post(url, body) {
+  return requestJSON(url, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(body || {}) });
+}
+
+function patch(url, body) {
+  return requestJSON(url, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(body) });
 }
 
 // assetURL builds the browser URL for an uploaded image.
@@ -28,8 +53,7 @@ export function storyAssetURL(storyId, name) {
 async function uploadTo(base, id, file) {
   const form = new FormData();
   form.append('file', file, file.name || 'upload');
-  const res = await fetch(base + '/' + encodeURIComponent(id) + '/assets', { method: 'POST', body: form });
-  return toJSON(res);
+  return requestJSON(base + '/' + encodeURIComponent(id) + '/assets', { method: 'POST', body: form });
 }
 
 // uploadAsset posts a File to a session and resolves to { name, url }.
@@ -43,22 +67,25 @@ export function uploadStoryAsset(storyId, file) {
 }
 
 export const api = {
-  config: () => fetch('/api/config').then(toJSON),
-  saveConfig: (c) => fetch('/api/config', { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(c) }).then(toJSON),
-  models: () => fetch('/api/models').then(toJSON),
-  tools: () => fetch('/api/tools').then(toJSON),
-  speechModels: () => fetch('/api/speech/models').then(toJSON),
-  stories: () => fetch('/api/stories').then(toJSON),
-  story: (id) => fetch('/api/stories/' + encodeURIComponent(id)).then(toJSON),
-  createStory: (body) => fetch('/api/stories', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(body) }).then(toJSON),
-  patchStory: (id, body) => fetch('/api/stories/' + encodeURIComponent(id), { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(body) }).then(toJSON),
-  deleteStory: (id) => fetch('/api/stories/' + encodeURIComponent(id), { method: 'DELETE' }).then(toJSON),
+  authStatus: () => requestJSON('/api/auth/status'),
+  login: (password) => post('/api/auth/login', { password }),
+  logout: () => post('/api/auth/logout'),
+  config: () => requestJSON('/api/config'),
+  saveConfig: (c) => requestJSON('/api/config', { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(c) }),
+  models: () => requestJSON('/api/models'),
+  tools: () => requestJSON('/api/tools'),
+  speechModels: () => requestJSON('/api/speech/models'),
+  stories: () => requestJSON('/api/stories'),
+  story: (id) => requestJSON('/api/stories/' + encodeURIComponent(id)),
+  createStory: (body) => post('/api/stories', body),
+  patchStory: (id, body) => patch('/api/stories/' + encodeURIComponent(id), body),
+  deleteStory: (id) => requestJSON('/api/stories/' + encodeURIComponent(id), { method: 'DELETE' }),
   uploadStoryAsset,
-  sessions: () => fetch('/api/sessions').then(toJSON),
-  createSession: (body) => fetch('/api/sessions', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(body) }).then(toJSON),
-  session: (id) => fetch('/api/sessions/' + encodeURIComponent(id)).then(toJSON),
-  patchSession: (id, body) => fetch('/api/sessions/' + encodeURIComponent(id), { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(body) }).then(toJSON),
-  deleteSession: (id) => fetch('/api/sessions/' + encodeURIComponent(id), { method: 'DELETE' }).then(toJSON),
+  sessions: () => requestJSON('/api/sessions'),
+  createSession: (body) => post('/api/sessions', body),
+  session: (id) => requestJSON('/api/sessions/' + encodeURIComponent(id)),
+  patchSession: (id, body) => patch('/api/sessions/' + encodeURIComponent(id), body),
+  deleteSession: (id) => requestJSON('/api/sessions/' + encodeURIComponent(id), { method: 'DELETE' }),
   uploadAsset,
   stream: streamNDJSON,
 };
@@ -72,6 +99,7 @@ export async function streamNDJSON(path, body, onEvent, signal) {
     body: JSON.stringify(body || {}),
     signal,
   });
+  noteUnauthorized(path, res);
   if (!res.ok || !res.body) {
     let message = res.status + ' ' + res.statusText;
     try {

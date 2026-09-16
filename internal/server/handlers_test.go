@@ -8,11 +8,18 @@ import (
 	"testing"
 
 	"github.com/zp/genesis/internal/agent"
+	"github.com/zp/genesis/internal/auth"
 	"github.com/zp/genesis/internal/config"
 	"github.com/zp/genesis/internal/store"
 )
 
 func newTestServer(t *testing.T) (*Server, *config.Store) {
+	return newTestServerWithAuth(t, "")
+}
+
+// newTestServerWithAuth builds a server whose gate is enabled by password (an
+// empty password leaves the app open).
+func newTestServerWithAuth(t *testing.T, password string) (*Server, *config.Store) {
 	t.Helper()
 	cfg, err := config.Load(filepath.Join(t.TempDir(), "config.json"))
 	if err != nil {
@@ -26,7 +33,7 @@ func newTestServer(t *testing.T) (*Server, *config.Store) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return New(cfg, st, stories, agent.NewRegistry()), cfg
+	return New(cfg, st, stories, agent.NewRegistry(), auth.New(password)), cfg
 }
 
 func putConfig(t *testing.T, srv *Server, body string) *httptest.ResponseRecorder {

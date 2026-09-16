@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/zp/genesis/internal/agent"
+	"github.com/zp/genesis/internal/auth"
 	"github.com/zp/genesis/internal/config"
 	"github.com/zp/genesis/internal/llm"
 	"github.com/zp/genesis/internal/store"
@@ -27,12 +28,16 @@ type Server struct {
 	stories  *store.StoryStore
 	registry *agent.Registry
 	agent    *agent.Agent
+	auth     *auth.Authenticator
 	assets   http.Handler
 }
 
 // New constructs a Server.
-func New(cfg *config.Store, st *store.Store, stories *store.StoryStore, reg *agent.Registry) *Server {
-	s := &Server{cfg: cfg, store: st, stories: stories, registry: reg}
+func New(cfg *config.Store, st *store.Store, stories *store.StoryStore, reg *agent.Registry, authenticator *auth.Authenticator) *Server {
+	if authenticator == nil {
+		authenticator = auth.New("")
+	}
+	s := &Server{cfg: cfg, store: st, stories: stories, registry: reg, auth: authenticator}
 	s.agent = agent.New(st, reg, s.newClient, s.agentConfig)
 	sub, err := fs.Sub(web.Files, ".")
 	if err != nil {
@@ -68,6 +73,9 @@ func (s *Server) agentConfig() agent.Config {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", s.handleHealth)
+	mux.HandleFunc("GET /api/auth/status", s.handleAuthStatus)
+	mux.HandleFunc("POST /api/auth/login", s.handleAuthLogin)
+	mux.HandleFunc("POST /api/auth/logout", s.handleAuthLogout)
 	mux.HandleFunc("GET /api/config", s.handleGetConfig)
 	mux.HandleFunc("PUT /api/config", s.handlePutConfig)
 	mux.HandleFunc("GET /api/models", s.handleModels)
@@ -92,7 +100,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/sessions/{id}/speech", s.handleSpeech)
 	mux.HandleFunc("GET /api/speech/models", s.handleSpeechModels)
 	mux.Handle("GET /", s.assets)
-	return s.withLogging(mux)
+	return s.withLogging(s.requireAuth(mux))
 }
 
 func (s *Server) withLogging(next http.Handler) http.Handler {

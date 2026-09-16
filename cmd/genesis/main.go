@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/zp/genesis/internal/agent"
+	"github.com/zp/genesis/internal/auth"
 	"github.com/zp/genesis/internal/config"
 	"github.com/zp/genesis/internal/server"
 	"github.com/zp/genesis/internal/store"
@@ -77,7 +78,9 @@ func main() {
 	reg := agent.NewRegistry()
 	tools.RegisterBuiltins(reg)
 
-	srv := server.New(cfg, sessions, stories, reg)
+	authn := auth.New(os.Getenv("GENESIS_PASSWORD"))
+
+	srv := server.New(cfg, sessions, stories, reg, authn)
 	httpSrv := &http.Server{
 		Addr:              c.Addr,
 		Handler:           srv.Handler(),
@@ -93,6 +96,7 @@ func main() {
 	log.Printf("  tools     : %d registered", len(reg.Names()))
 	log.Printf("  model     : %s", c.Model)
 	log.Printf("  api key   : %s", keyState(c.APIKey))
+	log.Printf("  password  : %s", authState(authn))
 	log.Printf("  sessions  : %s", sessions.Dir())
 	log.Printf("  stories   : %s", stories.Dir())
 	log.Printf("  config    : %s", cp)
@@ -116,4 +120,11 @@ func keyState(key string) string {
 		return "not set (open Settings in the browser)"
 	}
 	return "set"
+}
+
+func authState(a *auth.Authenticator) string {
+	if a != nil && a.Enabled() {
+		return "set (GENESIS_PASSWORD, sessions kept in memory)"
+	}
+	return "not set (GENESIS_PASSWORD is empty, so the app is open)"
 }

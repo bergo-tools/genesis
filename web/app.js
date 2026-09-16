@@ -1,16 +1,20 @@
 import { h, Fragment, render } from './vendor/preact.module.js';
 import { useCallback, useEffect, useRef, useState } from './vendor/hooks.module.js';
 import htm from './vendor/htm.module.js';
-import { api, uploadAsset } from './api.js';
+import { api, uploadAsset, setUnauthorizedHandler } from './api.js';
 import * as C from './components.js';
 import { StoryModal } from './story.js';
 import { NewSessionModal, StoriesModal, PresetModal } from './library.js';
+import { Login } from './login.js';
 
 const html = htm.bind(h);
 const LS_KEY = 'genesis.lastSession';
 
-export function App() {
+// initialAuth is a test seam: the smoke test renders the unlocked app without
+// running effects (which is where the real auth status arrives).
+export function App({ initialAuth = null } = {}) {
   const [config, setConfig] = useState(null);
+  const [auth, setAuth] = useState(initialAuth);
   const [sessions, setSessions] = useState([]);
   const [session, setSession] = useState(null);
   const [status, setStatus] = useState(null);
@@ -36,6 +40,7 @@ export function App() {
   const speakRef = useRef(null);
   const speechRef = useRef({ current: null, queue: [], busy: false });
   const toastId = useRef(0);
+  const bootedRef = useRef(false);
 
   useEffect(() => {
     sessionRef.current = session;
@@ -45,10 +50,53 @@ export function App() {
     configRef.current = config;
   }, [config]);
 
+  // Any 401 from a normal API call means the login session is gone: drop back
+  // to the gate and let the next successful login reload everything.
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      bootedRef.current = false;
+      setSession(null);
+      setAuth({ enabled: true, authenticated: false });
+    });
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const status = await api.authStatus();
+        if (alive) setAuth(status);
+      } catch (err) {
+        // Keep the app usable when status is unreachable; a real 401 will send
+        // us back to the login screen anyway.
+        if (alive) setAuth({ enabled: false, authenticated: true });
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
+
   const pushToast = useCallback((message, type = 'info') => {
     const id = (toastId.current += 1);
     setToasts((list) => [...list, { id, message, type }]);
     setTimeout(() => setToasts((list) => list.filter((t) => t.id !== id)), type === 'error' ? 6500 : 3800);
+  }, []);
+
+  const handleLogin = useCallback(() => {
+    bootedRef.current = false;
+    setAuth({ enabled: true, authenticated: true });
+  }, []);
+
+  const logout = useCallback(async () => {
+    try {
+      await api.logout();
+    } catch (err) { /* the cookie is gone locally either way */ }
+    bootedRef.current = false;
+    setSession(null);
+    setSessions([]);
+    setActivity([]);
+    setChoices([]);
+    setUsage(null);
+    setAuth({ enabled: true, authenticated: false });
   }, []);
 
   const refreshSessions = useCallback(async () => {
@@ -614,6 +662,10 @@ export function App() {
   }, [openSession, pushToast]);
 
   useEffect(() => {
+    if (!auth) return;
+    if (auth.enabled && !auth.authenticated) return;
+    if (bootedRef.current) return;
+    bootedRef.current = true;
     (async () => {
       let cfg = null;
       try {
@@ -642,7 +694,7 @@ export function App() {
       if (target) await openSession(target);
       if (cfg && !cfg.hasKey) pushToast('Add your OpenRouter API key in Settings to begin.');
     })();
-  }, []);
+  }, [auth]);
 
   useEffect(() => {
     const onKey = (event) => {
@@ -664,6 +716,18 @@ export function App() {
     setSidebarOpen(false);
     setPanelOpen(false);
   };
+  if (!auth) {
+    return html`
+      <div class="login-boot"><span class="dots"><i></i><i></i><i></i></span></div>`;
+  }
+  if (auth.enabled && !auth.authenticated) {
+    return html`
+      <${Fragment}>
+        <${Login} onSuccess=${handleLogin} />
+        <${C.Toasts} toasts=${toasts} />
+      <//>`;
+  }
+
   const messages = (session && session.messages) || [];
 
   return html`
@@ -672,12 +736,14 @@ export function App() {
         sessions=${sessions}
         activeId=${session && session.id}
         open=${sidebarOpen}
+        auth=${auth}
         onOpen=${openSession}
         onNew=${() => setModal('new-session')}
         onStories=${() => setModal('stories')}
         onSettings=${openSettings}
         onTools=${openTools}
         onDelete=${deleteSession}
+        onLogout=${logout}
       />
       ${(sidebarOpen || panelOpen) && html`<div class="scrim" onClick=${closeDrawers}></div>`}
       <main class="main">
