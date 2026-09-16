@@ -6,6 +6,12 @@ import { CharacterEditor, ToolToggles, ReasoningSelect } from './components.js';
 
 const html = htm.bind(h);
 
+// preview trims a long text (e.g. a preset opening) for a compact hint.
+function preview(text, max) {
+  const value = String(text || '').trim();
+  return value.length > max ? value.slice(0, max) + '…' : value;
+}
+
 function StoryAvatar({ story, size }) {
   const src = story && story.avatar ? storyAssetURL(story.id, story.avatar) : '';
   return html`
@@ -56,7 +62,7 @@ export function NewSessionModal({ stories, onClose, onCreate }) {
                     </button>`)}
                 </div>
               </div>`}
-          ${selected && selected.opening ? html`<p class="hint">${selected.opening}</p>` : null}
+          ${selected && selected.opening ? html`<p class="hint">${preview(selected.opening, 220)}</p>` : null}
           <label class="field"><span>Session title (optional)</span>
             <input type="text" placeholder=${selected ? selected.title : 'Optional'} value=${title}
                    onInput=${ (e) => setTitle(e.currentTarget.value) } /></label>

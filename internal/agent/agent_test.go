@@ -159,7 +159,7 @@ func TestTrimHistoryKeepsToolPairs(t *testing.T) {
 		{Role: llm.RoleTool, ToolCallID: "1"},
 		{Role: llm.RoleUser, Content: "b"},
 	}
-	got := trimHistory(history, 2)
+	got := trimHistory(history, 2, 0)
 	if len(got) != 2 || got[0].Role != llm.RoleTool {
 		// start advanced past the orphaned tool message
 		if len(got) != 1 || got[0].Role != llm.RoleUser {

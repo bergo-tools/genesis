@@ -259,7 +259,7 @@ hr { border: none; border-top: 1px solid var(--border); margin: 2px 0; }
 .preset-actions { display: flex; flex-direction: column; gap: 4px; flex: none; }
 
 .thought-inline { margin-top: 6px; padding: 7px 11px; border-left: 3px solid var(--accent); border-radius: 0 10px 10px 0; background: color-mix(in srgb, var(--accent-soft) 45%, transparent); color: var(--muted); font-style: italic; font-size: 13.5px; }
-.msg.assistant.state .text, .msg.assistant.scene .text { font-family: var(--mono); font-size: 12.5px; color: var(--muted); background: var(--bg-soft); border-style: dashed; white-space: pre-wrap; }
+.msg.assistant.scene .text { font-family: var(--mono); font-size: 12.5px; color: var(--muted); background: var(--bg-soft); border-style: dashed; white-space: pre-wrap; }
 .msg.assistant.scene .text { border-left: 3px solid var(--accent); }
 .session-item { display: flex; align-items: stretch; gap: 4px; border-radius: 10px; border: 1px solid transparent; }
 .session-item:hover { background: var(--bg-soft); }

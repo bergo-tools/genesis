@@ -16,7 +16,12 @@ import (
 
 const (
 	maxHistoryMessages = 80
-	maxReminders       = 2
+	// maxHistoryTokens is an approximate budget for the transcript sent to the
+	// provider. Latin text is ~4 chars/token and CJK ~1 token/char, so the
+	// estimate below errs on the safe side; long stories are trimmed from the
+	// front instead of growing until the provider rejects the request.
+	maxHistoryTokens = 24000
+	maxReminders     = 2
 )
 
 const (
@@ -99,6 +104,10 @@ func (a *Agent) Continue(ctx context.Context, sess *store.Session, emit func(Eve
 	}
 	active := a.activeTools(sess)
 	choicesRequired := hasTool(active, "choices")
+	allowed := make(map[string]bool, len(active))
+	for _, t := range active {
+		allowed[t.Name] = true
+	}
 
 	turnPlayerFacing := false
 	turnChoices := false
@@ -176,15 +185,21 @@ func (a *Agent) Continue(ctx context.Context, sess *store.Session, emit func(Eve
 		terminal := false
 		lastCall := false
 		for _, call := range resp.ToolCalls {
-			if call.Name == "choices" {
-				tc.ChoicesOffered = true
+			// Only an allowed tool may steer the turn: a disabled tool must
+			// not offer choices, force last_call or terminate the turn.
+			if allowed[call.Name] {
+				if call.Name == "choices" {
+					tc.ChoicesOffered = true
+				}
+				if wantsLastCall(call.Arguments) {
+					lastCall = true
+				}
 			}
-			if wantsLastCall(call.Arguments) {
-				lastCall = true
-			}
-			a.executeTool(ctx, tc, call)
-			if tool, ok := a.registry.Get(call.Name); ok && tool.Terminal {
-				terminal = true
+			a.executeTool(ctx, tc, call, allowed)
+			if allowed[call.Name] {
+				if tool, ok := a.registry.Get(call.Name); ok && tool.Terminal {
+					terminal = true
+				}
 			}
 		}
 		turnPlayerFacing = turnPlayerFacing || tc.PlayerFacing
@@ -279,7 +294,7 @@ func appendReminder(sess *store.Session, text string) {
 	sess.History = append(sess.History, llm.Message{Role: llm.RoleUser, Content: text})
 }
 
-func (a *Agent) executeTool(ctx context.Context, tc *TurnContext, call llm.ToolCall) {
+func (a *Agent) executeTool(ctx context.Context, tc *TurnContext, call llm.ToolCall, allowed map[string]bool) {
 	raw := json.RawMessage(strings.TrimSpace(call.Arguments))
 	if len(raw) == 0 || !json.Valid(raw) {
 		raw = json.RawMessage("{}")
@@ -289,14 +304,19 @@ func (a *Agent) executeTool(ctx context.Context, tc *TurnContext, call llm.ToolC
 		tc.Emit(Event{Type: EventToolStart, Step: tc.Step, Tool: ev})
 	}
 
-	tool, ok := a.registry.Get(call.Name)
+	tool, known := a.registry.Get(call.Name)
 	var (
 		result any
 		err    error
 	)
-	if !ok {
+	switch {
+	case !known:
 		err = fmt.Errorf("unknown tool %q", call.Name)
-	} else {
+	case !allowed[call.Name]:
+		// A tool can be switched off for this story; refuse even if the model
+		// still asks for it, so per-story toggles really are authoritative.
+		err = fmt.Errorf("tool %q is not available in this story", call.Name)
+	default:
 		result, err = tool.Handler(ctx, tc, raw)
 	}
 
@@ -326,7 +346,7 @@ func (a *Agent) executeTool(ctx context.Context, tc *TurnContext, call llm.ToolC
 }
 
 func (a *Agent) buildMessages(sess *store.Session) []llm.Message {
-	history := trimHistory(sess.History, maxHistoryMessages)
+	history := trimHistory(sess.History, maxHistoryMessages, maxHistoryTokens)
 	msgs := make([]llm.Message, 0, len(history)+1)
 	msgs = append(msgs, llm.Message{Role: llm.RoleSystem, Content: a.SystemPrompt(sess)})
 	for _, m := range history {
@@ -386,14 +406,56 @@ func mimeForExt(ext string) string {
 }
 
 // trimHistory keeps the newest messages without orphaning tool results that
-// must immediately follow their assistant tool-call message.
-func trimHistory(h []llm.Message, max int) []llm.Message {
-	if max <= 0 || len(h) <= max {
+// must immediately follow their assistant tool-call message. It applies both a
+// message cap and an approximate token budget so a long story cannot grow past
+// the provider's context window.
+func trimHistory(h []llm.Message, maxMessages, maxTokens int) []llm.Message {
+	if len(h) == 0 {
 		return h
 	}
-	start := len(h) - max
+	start := 0
+	if maxMessages > 0 && len(h) > maxMessages {
+		start = len(h) - maxMessages
+	}
+	if maxTokens > 0 {
+		used := 0
+		boundary := start
+		for i := len(h) - 1; i >= start; i-- {
+			t := estimateTokens(h[i])
+			// Always keep at least the newest message, even if it alone is big.
+			if used+t > maxTokens && i < len(h)-1 {
+				break
+			}
+			used += t
+			boundary = i
+		}
+		start = boundary
+	}
 	for start < len(h) && h[start].Role == llm.RoleTool {
 		start++
 	}
 	return h[start:]
+}
+
+// estimateTokens approximates the provider token count for one message.
+func estimateTokens(m llm.Message) int {
+	n := 4 + estimateTextTokens(m.Content) + estimateTextTokens(m.Reasoning)
+	for _, tc := range m.ToolCalls {
+		n += estimateTextTokens(tc.Name) + estimateTextTokens(tc.Arguments)
+	}
+	return n
+}
+
+// estimateTextTokens counts non-ASCII runes whole and Latin text at roughly
+// four characters per token.
+func estimateTextTokens(s string) int {
+	ascii, other := 0, 0
+	for _, r := range s {
+		if r < 128 {
+			ascii++
+		} else {
+			other++
+		}
+	}
+	return ascii/4 + other
 }

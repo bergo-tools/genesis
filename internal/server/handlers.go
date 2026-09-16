@@ -309,28 +309,50 @@ func toCharacter(in characterInput) *store.Character {
 	}
 }
 
+// turnBackup captures everything a re-roll can discard, so a turn that fails
+// before producing anything can be put back exactly as it was.
+type turnBackup struct {
+	Messages []*store.Message
+	History  []llm.Message
+	Choices  []store.Choice
+	Prompt   string
+	Scene    store.Scene
+	State    map[string]any
+}
+
+func snapshotTurn(sess *store.Session) *turnBackup {
+	if sess == nil {
+		return nil
+	}
+	return &turnBackup{
+		Messages: append([]*store.Message(nil), sess.Messages...),
+		History:  append([]llm.Message(nil), sess.History...),
+		Choices:  append([]store.Choice(nil), sess.PendingChoices...),
+		Prompt:   sess.PendingPrompt,
+		Scene:    sess.Scene,
+		State:    cloneState(sess.State),
+	}
+}
+
+func (b *turnBackup) restore(sess *store.Session) {
+	if b == nil || sess == nil {
+		return
+	}
+	sess.Messages = b.Messages
+	sess.History = b.History
+	sess.PendingChoices = b.Choices
+	sess.PendingPrompt = b.Prompt
+	sess.Scene = b.Scene
+	sess.State = b.State
+}
+
 func (s *Server) handleListSessions(w http.ResponseWriter, _ *http.Request) {
-	sessions, err := s.store.List()
+	summaries, err := s.store.Summaries()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	out := make([]map[string]any, 0, len(sessions))
-	for _, sess := range sessions {
-		out = append(out, map[string]any{
-			"id":           sess.ID,
-			"storyId":      sess.StoryID,
-			"storyTitle":   sess.StoryTitle,
-			"title":        sessionTitle(sess),
-			"avatar":       sess.Avatar,
-			"model":        sess.Model,
-			"characters":   sess.CharacterNames(),
-			"messageCount": len(sess.Messages),
-			"createdAt":    sess.CreatedAt,
-			"updatedAt":    sess.UpdatedAt,
-		})
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"sessions": out})
+	writeJSON(w, http.StatusOK, map[string]any{"sessions": summaries})
 }
 
 func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
@@ -524,6 +546,8 @@ func (s *Server) handleMessage(w http.ResponseWriter, r *http.Request) {
 	user := &store.Message{
 		ID: store.NewID(), Role: "user", Kind: store.KindUser,
 		Speaker: sess.Persona.Name, Text: text, OOC: ooc, Images: images, CreatedAt: time.Now().UTC(),
+		// Remember the world before this turn so a re-roll can restore it.
+		Snapshot: &store.TurnSnapshot{Scene: sess.Scene, State: cloneState(sess.State)},
 	}
 	sess.Messages = append(sess.Messages, user)
 	sess.History = append(sess.History, llm.Message{
@@ -545,7 +569,7 @@ func (s *Server) handleMessage(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	s.streamTurn(w, r, sess, user, title)
+	s.streamTurn(w, r, sess, user, title, nil)
 }
 
 func (s *Server) handleOpening(w http.ResponseWriter, r *http.Request) {
@@ -568,7 +592,7 @@ func (s *Server) handleOpening(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	s.streamTurn(w, r, sess, nil, "")
+	s.streamTurn(w, r, sess, nil, "", nil)
 }
 
 // handleRegenerate rewrites the response to one user message. messageId picks
@@ -594,6 +618,7 @@ func (s *Server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, statusFor(err), err)
 		return
 	}
+	backup := snapshotTurn(sess)
 	anchor := strings.TrimSpace(body.MessageID)
 	if anchor == "" {
 		anchor = lastUserMessageID(sess)
@@ -613,7 +638,7 @@ func (s *Server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	s.streamTurn(w, r, sess, nil, "")
+	s.streamTurn(w, r, sess, nil, "", backup)
 }
 
 // userTurnContent merges a story message with an out-of-character directive.
@@ -643,18 +668,48 @@ func lastUserMessageID(sess *store.Session) string {
 	return ""
 }
 
-// setUserMessageText rewrites a user message in both the transcript and the
-// display list.
+// setUserMessageText rewrites a user message in both the display list and the
+// model transcript. It preserves the message's OOC directive and also works
+// for sessions recorded before transcript entries carried a Ref.
 func setUserMessageText(sess *store.Session, msgID, text string) {
+	text = strings.TrimSpace(text)
+	ooc := ""
+	ordinal := -1
+	seen := 0
 	for _, m := range sess.Messages {
-		if m != nil && m.ID == msgID && m.Kind == store.KindUser {
-			m.Text = text
+		if m == nil || m.Kind != store.KindUser {
+			continue
 		}
+		if m.ID == msgID {
+			m.Text = text
+			ooc = m.OOC
+			ordinal = seen
+		}
+		seen++
 	}
+	content := userTurnContent(text, ooc)
 	for i := range sess.History {
 		h := &sess.History[i]
 		if h.Role == llm.RoleUser && h.Ref == msgID {
-			h.Content = text
+			h.Content = content
+			return
+		}
+	}
+	if ordinal < 0 {
+		return
+	}
+	// Older sessions have no Ref: line the message up by its position among
+	// the player turns, skipping the agent's [system] reminders.
+	n := -1
+	for i := range sess.History {
+		h := &sess.History[i]
+		if h.Role != llm.RoleUser || strings.HasPrefix(h.Content, "[system]") {
+			continue
+		}
+		n++
+		if n == ordinal {
+			h.Content = content
+			return
 		}
 	}
 }
@@ -756,6 +811,10 @@ func truncateFromUser(sess *store.Session, msgID string) bool {
 	if mi < 0 {
 		return false
 	}
+	if snap := sess.Messages[mi].Snapshot; snap != nil {
+		sess.Scene = snap.Scene
+		sess.State = cloneState(snap.State)
+	}
 	sess.Messages = sess.Messages[:mi+1]
 
 	hi := -1
@@ -794,16 +853,6 @@ func deriveTitle(text string) string {
 		return "New story"
 	}
 	return text
-}
-
-func sessionTitle(sess *store.Session) string {
-	if sess == nil {
-		return "Untitled"
-	}
-	if strings.TrimSpace(sess.Title) != "" {
-		return sess.Title
-	}
-	return "Untitled"
 }
 
 func firstNonEmpty(values ...string) string {

@@ -81,6 +81,7 @@ func (s *Server) handleListStories(w http.ResponseWriter, _ *http.Request) {
 			"avatar":         st.Avatar,
 			"description":    st.Description,
 			"genre":          st.Genre,
+			"opening":        st.Opening,
 			"builtin":        st.Builtin,
 			"characterCount": len(st.Characters),
 			"updatedAt":      st.UpdatedAt,

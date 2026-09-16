@@ -223,9 +223,29 @@ func (r *repo) saveUpload(id string, rd io.Reader, ext string) (string, error) {
 
 // ---------------------------------------------------------------- sessions
 
+// SessionSummary is the lightweight record the sidebar needs. Listing sessions
+// must not parse every transcript, so the store keeps summaries in memory and
+// updates them on every write.
+type SessionSummary struct {
+	ID           string    `json:"id"`
+	StoryID      string    `json:"storyId,omitempty"`
+	StoryTitle   string    `json:"storyTitle,omitempty"`
+	Title        string    `json:"title"`
+	Avatar       string    `json:"avatar,omitempty"`
+	Model        string    `json:"model,omitempty"`
+	Characters   []string  `json:"characters"`
+	MessageCount int       `json:"messageCount"`
+	CreatedAt    time.Time `json:"createdAt"`
+	UpdatedAt    time.Time `json:"updatedAt"`
+}
+
 // Store is the session (conversation) repository.
 type Store struct {
 	repo *repo
+
+	mu        sync.RWMutex
+	summaries map[string]*SessionSummary
+	loaded    bool
 }
 
 // New opens the session repository rooted at dir.
@@ -234,7 +254,98 @@ func New(dir string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Store{repo: r}, nil
+	return &Store{repo: r, summaries: map[string]*SessionSummary{}}, nil
+}
+
+// Summaries lists sessions for the sidebar. The first call scans the directory
+// once; after that the cache is maintained on every write.
+func (s *Store) Summaries() ([]*SessionSummary, error) {
+	s.mu.RLock()
+	if s.loaded {
+		out := make([]*SessionSummary, 0, len(s.summaries))
+		for _, v := range s.summaries {
+			out = append(out, v.clone())
+		}
+		s.mu.RUnlock()
+		sortSummaries(out)
+		return out, nil
+	}
+	s.mu.RUnlock()
+
+	sessions, err := s.List()
+	if err != nil {
+		return nil, err
+	}
+	s.mu.Lock()
+	s.summaries = make(map[string]*SessionSummary, len(sessions))
+	for _, sess := range sessions {
+		if sum := summarize(sess); sum != nil {
+			s.summaries[sess.ID] = sum
+		}
+	}
+	s.loaded = true
+	out := make([]*SessionSummary, 0, len(s.summaries))
+	for _, v := range s.summaries {
+		out = append(out, v.clone())
+	}
+	s.mu.Unlock()
+	sortSummaries(out)
+	return out, nil
+}
+
+func (s *Store) cacheSummary(sess *Session) {
+	if sess == nil {
+		return
+	}
+	s.mu.Lock()
+	if s.summaries == nil {
+		s.summaries = map[string]*SessionSummary{}
+	}
+	s.summaries[sess.ID] = summarize(sess)
+	s.mu.Unlock()
+}
+
+func (s *Store) forgetSummary(id string) {
+	s.mu.Lock()
+	delete(s.summaries, id)
+	s.mu.Unlock()
+}
+
+func summarize(sess *Session) *SessionSummary {
+	if sess == nil {
+		return nil
+	}
+	title := strings.TrimSpace(sess.Title)
+	if title == "" {
+		title = "Untitled"
+	}
+	return &SessionSummary{
+		ID:           sess.ID,
+		StoryID:      sess.StoryID,
+		StoryTitle:   sess.StoryTitle,
+		Title:        title,
+		Avatar:       sess.Avatar,
+		Model:        sess.Model,
+		Characters:   sess.CharacterNames(),
+		MessageCount: len(sess.Messages),
+		CreatedAt:    sess.CreatedAt,
+		UpdatedAt:    sess.UpdatedAt,
+	}
+}
+
+func (v *SessionSummary) clone() *SessionSummary {
+	if v == nil {
+		return nil
+	}
+	cp := *v
+	if v.Characters != nil {
+		cp.Characters = append([]string(nil), v.Characters...)
+	}
+	return &cp
+}
+
+func sortSummaries(list []*SessionSummary) {
+	sort.Slice(list, func(i, j int) bool { return list[i].UpdatedAt.After(list[j].UpdatedAt) })
 }
 
 // Dir returns the sessions root directory.
@@ -289,7 +400,11 @@ func (s *Store) Create(sess *Session) error {
 	if sess.State == nil {
 		sess.State = map[string]any{}
 	}
-	return s.repo.save(sess.ID, sess)
+	if err := s.repo.save(sess.ID, sess); err != nil {
+		return err
+	}
+	s.cacheSummary(sess)
+	return nil
 }
 
 // Save writes a session.
@@ -301,11 +416,21 @@ func (s *Store) Save(sess *Session) error {
 	if sess.State == nil {
 		sess.State = map[string]any{}
 	}
-	return s.repo.save(sess.ID, sess)
+	if err := s.repo.save(sess.ID, sess); err != nil {
+		return err
+	}
+	s.cacheSummary(sess)
+	return nil
 }
 
 // Delete removes a session and all of its assets.
-func (s *Store) Delete(id string) error { return s.repo.remove(id) }
+func (s *Store) Delete(id string) error {
+	if err := s.repo.remove(id); err != nil {
+		return err
+	}
+	s.forgetSummary(id)
+	return nil
+}
 
 // SaveAsset stores an uploaded image inside the session directory.
 func (s *Store) SaveAsset(id string, rd io.Reader, ext string) (string, error) {

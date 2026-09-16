@@ -113,8 +113,10 @@ func (s *Server) withLogging(next http.Handler) http.Handler {
 	})
 }
 
-// streamTurn runs the agent and streams newline-delimited JSON events.
-func (s *Server) streamTurn(w http.ResponseWriter, r *http.Request, sess *store.Session, userMsg *store.Message, title string) {
+// streamTurn runs the agent and streams newline-delimited JSON events. When
+// rollback is set and the run fails before producing anything, the session is
+// put back the way it was so a failed re-roll cannot destroy a turn.
+func (s *Server) streamTurn(w http.ResponseWriter, r *http.Request, sess *store.Session, userMsg *store.Message, title string, rollback *turnBackup) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		writeError(w, http.StatusInternalServerError, errors.New("streaming not supported by this connection"))
@@ -128,9 +130,14 @@ func (s *Server) streamTurn(w http.ResponseWriter, r *http.Request, sess *store.
 
 	enc := json.NewEncoder(w)
 	var mu sync.Mutex
+	effects := 0
 	emit := func(ev agent.Event) {
 		mu.Lock()
 		defer mu.Unlock()
+		switch ev.Type {
+		case agent.EventMessage, agent.EventScene, agent.EventChoices:
+			effects++
+		}
 		if err := enc.Encode(ev); err != nil {
 			return
 		}
@@ -145,6 +152,9 @@ func (s *Server) streamTurn(w http.ResponseWriter, r *http.Request, sess *store.
 	}
 
 	runErr := s.agent.Continue(r.Context(), sess, emit)
+	if runErr != nil && effects == 0 && rollback != nil {
+		rollback.restore(sess)
+	}
 	if runErr != nil && !errors.Is(runErr, r.Context().Err()) {
 		emit(agent.Event{Type: agent.EventError, Error: runErr.Error()})
 	}

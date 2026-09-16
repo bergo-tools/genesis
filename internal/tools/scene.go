@@ -51,7 +51,6 @@ func sceneTool() *agent.Tool {
 					Kind:    store.KindScene,
 					Speaker: "Scene",
 					Text:    summary,
-					Args:    jsonBytes(*s),
 				})
 			}
 			return map[string]any{"ok": true, "scene": *s}, nil

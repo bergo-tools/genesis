@@ -3,7 +3,6 @@ package store
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"time"
 
 	"github.com/zp/genesis/internal/llm"
@@ -106,7 +105,6 @@ const (
 	KindNarration = "narration"
 	KindThought   = "thought"
 	KindPrompt    = "prompt"
-	KindState     = "state"
 	KindScene     = "scene"
 	KindSystem    = "system"
 )
@@ -121,11 +119,19 @@ type Message struct {
 	Thought string `json:"thought,omitempty"`
 	// OOC is an out-of-character instruction the player sent with this
 	// message. It is shown separately and passed to the model as [OOC] text.
-	OOC       string          `json:"ooc,omitempty"`
-	Mood      string          `json:"mood,omitempty"`
-	Images    []string        `json:"images,omitempty"`
-	Args      json.RawMessage `json:"args,omitempty"`
-	CreatedAt time.Time       `json:"createdAt"`
+	OOC       string    `json:"ooc,omitempty"`
+	Mood      string    `json:"mood,omitempty"`
+	Images    []string  `json:"images,omitempty"`
+	CreatedAt time.Time `json:"createdAt"`
+	// Snapshot is the world as it was before this user turn ran. A re-roll or
+	// edit restores it so the scene cannot drift out of sync with the messages.
+	Snapshot *TurnSnapshot `json:"snapshot,omitempty"`
+}
+
+// TurnSnapshot captures the mutable world state a turn may change.
+type TurnSnapshot struct {
+	Scene Scene          `json:"scene,omitempty"`
+	State map[string]any `json:"state,omitempty"`
 }
 
 // Choice is one branch offered to the player.

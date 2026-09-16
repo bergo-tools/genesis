@@ -50,7 +50,7 @@ function messageImages(message, session) {
 export function Message({ message, session, onSpeak, speaking, action, onReroll, onEdit, busy }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(message.text || '');
-  const speakable = Boolean(message.text) && message.kind !== 'state' && message.kind !== 'scene';
+  const speakable = Boolean(message.text) && message.kind !== 'scene';
   const canEdit = Boolean(action && action.editable);
   const canReroll = Boolean(action && action.rerollFrom);
   const hasActions = speakable || canEdit || canReroll;
@@ -201,10 +201,11 @@ export function Composer({ streaming, disabled, uploading, hasChoices, onSend, o
   }, [value]);
 
   const busy = streaming || uploading;
+  const locked = Boolean(disabled);
   const submit = () => {
     const text = value.trim();
     const directive = ooc.trim();
-    if (busy || (!text && !files.length && !directive)) return;
+    if (locked || busy || (!text && !files.length && !directive)) return;
     const payload = files.map((f) => f.file);
     setValue('');
     setOoc('');
@@ -232,24 +233,25 @@ export function Composer({ streaming, disabled, uploading, hasChoices, onSend, o
             </div>`)}
         </div>`}
       ${showOoc && html`
-        <textarea class="ooc-box" rows="2" value=${ooc} autocomplete="off"
+        <textarea class="ooc-box" rows="2" value=${ooc} autocomplete="off" disabled=${locked}
                   placeholder="Out-of-character instruction to the model — it directs the story, it is not part of it."
                   onInput=${ (e) => setOoc(e.currentTarget.value) }></textarea>`}
       <div class="composer-row">
         <button class="btn btn-ghost attach-btn" type="button" title="Attach an image"
-                disabled=${busy} onClick=${() => fileRef.current && fileRef.current.click()}>🖼</button>
-        <input ref=${fileRef} type="file" accept="image/*" multiple hidden onChange=${addFiles} />
+                disabled=${locked || busy} onClick=${() => fileRef.current && fileRef.current.click()}>🖼</button>
+        <input ref=${fileRef} type="file" accept="image/*" multiple hidden disabled=${locked || busy} onChange=${addFiles} />
         <textarea
           ref=${ref}
           rows="1"
           value=${value}
           autocomplete="off"
-          placeholder=${hasChoices ? 'Or write your own action…' : 'What do you do?'}
+          disabled=${locked}
+          placeholder=${locked ? 'Create a story to start…' : (hasChoices ? 'Or write your own action…' : 'What do you do?')}
           onInput=${ (e) => setValue(e.currentTarget.value) }
           onKeyDown=${ (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); } } }
         ></textarea>
         <button class=${'btn btn-ghost btn-ooc' + (showOoc ? ' active' : '')} type="button"
-                title="Add an out-of-character instruction" onClick=${() => setShowOoc((v) => !v)}>OOC</button>
+                title="Add an out-of-character instruction" disabled=${locked} onClick=${() => setShowOoc((v) => !v)}>OOC</button>
         ${streaming
           ? html`<button class="btn btn-danger" type="button" onClick=${onStop}>Cancel</button>`
           : html`<button class="btn btn-primary" type="button" disabled=${Boolean(disabled) || uploading} onClick=${submit}>${uploading ? '…' : 'Send'}</button>`}
@@ -594,133 +596,11 @@ export function SettingsModal({ config, onClose, onSave, chatModels, onReloadMod
           <label class="field"><span>Global director instructions</span>
             <textarea rows="4" placeholder="Extra standing instructions appended to every system prompt."
                       value=${form.systemPrompt} onInput=${set('systemPrompt')}></textarea></label>
+          <p class="hint">Saving also applies the model and generation settings to the story you have open.</p>
         </div>
         <footer class="modal-foot">
           <button class="btn btn-ghost" type="button" onClick=${onClose}>Cancel</button>
           <button class="btn btn-primary" type="button" onClick=${save}>Save</button>
-        </footer>
-      </div>
-    </div>`;
-}
-
-function newCharacter() {
-  return { key: 'c' + Math.random().toString(36).slice(2), id: '', name: '', description: '', personality: '', avatar: '', voice: '', avatarFile: null, avatarPreview: '' };
-}
-
-export function NewStoryModal({ config, onClose, onCreate, chatModels, onLoadSpeechModels, tools }) {
-  const cfg = config || {};
-  const [speechModels, setSpeechModels] = useState([]);
-  useEffect(() => {
-    let alive = true;
-    if (onLoadSpeechModels) {
-      onLoadSpeechModels().then((list) => {
-        if (alive) setSpeechModels(list || []);
-      });
-    }
-    return () => {
-      alive = false;
-    };
-  }, [onLoadSpeechModels]);
-  const voiceOptions = ((speechModels.find((m) => m.id === cfg.speechModel) || {}).voices) || [];
-  const [title, setTitle] = useState('');
-  const [personaName, setPersonaName] = useState('');
-  const [personaDesc, setPersonaDesc] = useState('');
-  const [greeting, setGreeting] = useState('');
-  const [model, setModel] = useState(cfg.model || '');
-  const [maxTokens, setMaxTokens] = useState(cfg.maxTokens || 2048);
-  const [choicesEnabled, setChoicesEnabled] = useState(true);
-  const [disabledTools, setDisabledTools] = useState(cfg.disabledTools || []);
-  const [reasoningEffort, setReasoningEffort] = useState(cfg.reasoningEffort || 'off');
-  const [characters, setCharacters] = useState([newCharacter()]);
-  const [avatarFile, setAvatarFile] = useState(null);
-  const [avatarPreview, setAvatarPreview] = useState('');
-  const [busy, setBusy] = useState(false);
-
-  const update = (index, patch) => setCharacters((cur) => cur.map((c, i) => (i === index ? { ...c, ...patch } : c)));
-  const remove = (index) => setCharacters((cur) => cur.filter((_, i) => i !== index));
-  const pickStoryAvatar = (e) => {
-    const file = e.currentTarget.files && e.currentTarget.files[0];
-    if (file) {
-      setAvatarFile(file);
-      setAvatarPreview(URL.createObjectURL(file));
-    }
-  };
-  const create = async () => {
-    setBusy(true);
-    try {
-      await onCreate({
-        title, personaName, personaDesc, greeting, model, choicesEnabled, reasoningEffort,
-        maxTokens, disabledTools, avatarFile, characters,
-      });
-    } finally {
-      setBusy(false);
-    }
-  };
-  return html`
-    <div class="modal" onClick=${ (e) => { if (e.target === e.currentTarget) onClose(); } }>
-      <div class="modal-card">
-        <header class="modal-head"><h2>New story</h2>
-          <button class="icon-btn" type="button" onClick=${onClose}>×</button></header>
-        <div class="modal-body">
-          <div class="story-avatar-row">
-            <label class="avatar-picker" title="Story avatar">
-              ${avatarPreview ? html`<img src=${avatarPreview} alt="" />` : '+'}
-              <input type="file" accept="image/*" onChange=${pickStoryAvatar} />
-            </label>
-            <label class="field grow"><span>Story title</span>
-              <input type="text" placeholder="Optional" value=${title} onInput=${ (e) => setTitle(e.currentTarget.value) } /></label>
-          </div>
-          <div class="grid-2">
-            <label class="field"><span>Your name</span>
-              <input type="text" placeholder="The player" value=${personaName} onInput=${ (e) => setPersonaName(e.currentTarget.value) } /></label>
-            <label class="field"><span>Your description</span>
-              <input type="text" placeholder="A wandering cartographer" value=${personaDesc} onInput=${ (e) => setPersonaDesc(e.currentTarget.value) } /></label>
-          </div>
-          <hr />
-          <div>
-            <div class="row" style="justify-content:space-between;align-items:center">
-              <strong>Cast</strong>
-              <button class="btn btn-ghost btn-sm" type="button"
-                      onClick=${ () => setCharacters((cur) => cur.concat([newCharacter()])) }>+ Add character</button>
-            </div>
-            ${characters.map((c, i) => html`
-              <div key=${c.key} style="margin-top:10px">
-                <${CharacterEditor} character=${c} index=${i} sessionId=${''} voiceOptions=${voiceOptions}
-                  onChange=${update} onRemove=${remove} canRemove=${characters.length > 1} />
-              </div>`)}
-          </div>
-          <label class="field"><span>Opening message (optional)</span>
-            <textarea rows="2" placeholder="Leave blank to let the agent open the scene."
-                      value=${greeting} onInput=${ (e) => setGreeting(e.currentTarget.value) }></textarea></label>
-          <div class="grid-2">
-            <label class="field"><span>Model</span>
-              <input type="text" list="new-story-model-options" value=${model}
-                     onChange=${ (e) => {
-                       const found = (chatModels || []).find((m) => m.id === e.currentTarget.value);
-                       if (found && found.maxOutput) setMaxTokens(found.maxOutput);
-                     } }
-                     onInput=${ (e) => setModel(e.currentTarget.value) } /></label>
-            <${ReasoningSelect} value=${reasoningEffort} onChange=${setReasoningEffort} />
-          </div>
-          <datalist id="new-story-model-options">
-            ${(chatModels || []).map((m) => html`<option value=${m.id} label=${modelLabel(m)} key=${m.id}></option>`)}
-          </datalist>
-          <label class="field"><span>Max output tokens</span>
-            <input type="number" min="64" step="64" value=${maxTokens}
-                   onInput=${ (e) => setMaxTokens(Number(e.currentTarget.value)) } />
-            <span class="hint">auto-filled from the chosen model (OpenRouter's max)</span></label>
-          <hr />
-          <strong>Tools</strong>
-          <${ToolToggles}
-            tools=${tools}
-            choicesEnabled=${choicesEnabled}
-            disabledTools=${disabledTools}
-            onChoices=${setChoicesEnabled}
-            onToggle=${ (name, on) => setDisabledTools((cur) => (on ? cur.filter((n) => n !== name) : cur.concat([name]))) } />
-        </div>
-        <footer class="modal-foot">
-          <button class="btn btn-ghost" type="button" onClick=${onClose}>Cancel</button>
-          <button class="btn btn-primary" type="button" disabled=${busy} onClick=${create}>${busy ? 'Working…' : 'Create'}</button>
         </footer>
       </div>
     </div>`;

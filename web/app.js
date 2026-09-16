@@ -42,6 +42,7 @@ export function App({ initialAuth = null } = {}) {
   const toastId = useRef(0);
   const bootedRef = useRef(false);
   const streamTokenRef = useRef(0);
+  const needsResyncRef = useRef(false);
 
   useEffect(() => {
     sessionRef.current = session;
@@ -212,6 +213,9 @@ export function App({ initialAuth = null } = {}) {
         break;
       case 'error':
         pushToast(event.error, 'error');
+        // The turn may have been rolled back server-side; resync once the
+        // stream ends so the on-screen story matches what was saved.
+        needsResyncRef.current = true;
         break;
       case 'turn_end':
         setStatus(null);
@@ -234,11 +238,34 @@ export function App({ initialAuth = null } = {}) {
     try {
       await api.stream(path, body, emit, controller.signal);
     } catch (err) {
-      if (err.name !== 'AbortError') pushToast(err.message, 'error');
+      if (err.name !== 'AbortError') {
+        pushToast(err.message, 'error');
+        // The turn may have been rolled back server-side; resync so the story
+        // on screen matches what was actually saved.
+        const current = sessionRef.current;
+        if (current) {
+          try {
+            const fresh = await api.session(current.id);
+            setSession(fresh);
+            setChoices(fresh.pendingChoices || []);
+          } catch (_) { /* keep the optimistic view */ }
+        }
+      }
     } finally {
       abortRef.current = null;
       setStreaming(false);
       setStatus(null);
+      if (needsResyncRef.current) {
+        needsResyncRef.current = false;
+        const current = sessionRef.current;
+        if (current) {
+          try {
+            const fresh = await api.session(current.id);
+            setSession(fresh);
+            setChoices(fresh.pendingChoices || []);
+          } catch (_) { /* keep what we have */ }
+        }
+      }
       await refreshSessions();
     }
   }, [handleEvent, pushToast, refreshSessions]);
@@ -283,6 +310,7 @@ export function App({ initialAuth = null } = {}) {
   const rerollFrom = useCallback(async (messageId) => {
     const current = sessionRef.current;
     if (!current || !messageId) return;
+    if (!window.confirm('Re-roll from this turn? Every reply after it will be replaced.')) return;
     setSession((s) => {
       if (!s) return s;
       const idx = s.messages.findIndex((m) => m.id === messageId);
@@ -400,7 +428,26 @@ export function App({ initialAuth = null } = {}) {
 
   const saveConfig = useCallback(async (body) => {
     try {
-      setConfig(await api.saveConfig(body));
+      const saved = await api.saveConfig(body);
+      setConfig(saved);
+      const current = sessionRef.current;
+      if (current) {
+        // Global Settings are the defaults; keep the open story in step with
+        // them so saving visibly takes effect instead of silently doing nothing.
+        const updated = await api.patchSession(current.id, {
+          model: saved.model,
+          settings: {
+            temperature: saved.temperature,
+            maxTokens: saved.maxTokens,
+            maxSteps: saved.maxSteps,
+            toolChoice: saved.toolChoice,
+            reasoningEffort: saved.reasoningEffort,
+            choicesEnabled: saved.choicesEnabled,
+            disabledTools: saved.disabledTools,
+          },
+        });
+        setSession(updated);
+      }
       pushToast('Settings saved.');
       setModal(null);
     } catch (err) {

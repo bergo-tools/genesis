@@ -4,7 +4,7 @@
 import renderToString from './render-to-string.module.js';
 import { h } from '../vendor/preact.module.js';
 import { App } from '../app.js';
-import { SettingsModal, MessageList } from '../components.js';
+import { SettingsModal, MessageList, Composer } from '../components.js';
 import { StoryModal } from '../story.js';
 import { NewSessionModal, StoriesModal, PresetModal } from '../library.js';
 import { Login } from '../login.js';
@@ -49,13 +49,15 @@ const newSession = renderToString(h(NewSessionModal, { stories }));
 const storiesModal = renderToString(h(StoriesModal, { stories }));
 const preset = renderToString(h(PresetModal, { story: null, config: {}, tools, chatModels }));
 const login = renderToString(h(Login, { onSuccess: () => {} }));
+const composer = renderToString(h(Composer, { streaming: false, disabled: false, uploading: false, hasChoices: false, onSend: () => {}, onStop: () => {} }));
 
 const total = check('MessageList', chat, ['hello there', 'well met', '✎', '↻'])
-  + check('App', app, ['Genesis', 'Begin a story', 'What do you do?', 'agentic roleplay'])
+  + check('App', app, ['Genesis', 'Begin a story', 'Create a story to start…', 'agentic roleplay'])
   + check('SettingsModal', settings, ['tool-toggles', 'toggle-row', 'chat-model-options', 'speech-model-options', '<select'])
   + check('StoryModal', sessionSettings, ['tool-toggles', 'story-model-options', '<select'])
   + check('NewSessionModal', newSession, ['preset-card', 'New session', 'Emberfall'])
   + check('StoriesModal', storiesModal, ['preset-list', 'preset-row', 'New preset', 'Start'])
   + check('PresetModal', preset, ['tool-toggles', 'preset-model-options', '<select'])
-  + check('Login', login, ['login-screen', 'login-card', 'Password', 'Unlock']);
-console.log('web SSR smoke test OK (' + total + ' chars across 7 renders)');
+  + check('Login', login, ['login-screen', 'login-card', 'Password', 'Unlock'])
+  + check('Composer', composer, ['What do you do?', 'OOC', 'Send']);
+console.log('web SSR smoke test OK (' + total + ' chars across 8 renders)');
