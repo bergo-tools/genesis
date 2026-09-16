@@ -83,7 +83,9 @@ export function StoryModal({ session, onClose, onSave, chatModels, speechModel, 
   const src = avatarPreview || (avatar && s.id ? assetURL(s.id, avatar) : '');
   const appliedModel = (chatModels || []).find((m) => m.id === model);
   const modelHint = appliedModel
-    ? ('context ' + Math.round((appliedModel.context || 0) / 1000) + 'k · max output ' + Math.round((appliedModel.maxOutput || 0) / 1000) + 'k')
+    ? ('context ' + Math.round((appliedModel.context || 0) / 1000) + 'k · ' + (appliedModel.maxOutput
+      ? 'max output ' + Math.round(appliedModel.maxOutput / 1000) + 'k'
+      : 'provider does not report a max output'))
     : ((chatModels || []).length + ' models available');
 
   return html`

@@ -27,22 +27,23 @@ func (s *Server) handleGetConfig(w http.ResponseWriter, _ *http.Request) {
 
 func (s *Server) handlePutConfig(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		APIKey            *string  `json:"apiKey"`
-		BaseURL           *string  `json:"baseUrl"`
-		Model             *string  `json:"model"`
-		Temperature       *float64 `json:"temperature"`
-		MaxTokens         *int     `json:"maxTokens"`
-		MaxSteps          *int     `json:"maxSteps"`
-		ToolChoice        *string  `json:"toolChoice"`
-		SystemPrompt      *string  `json:"systemPrompt"`
-		ParallelToolCalls *bool    `json:"parallelToolCalls"`
-		ReasoningEffort   *string  `json:"reasoningEffort"`
-		ChoicesEnabled    *bool    `json:"choicesEnabled"`
-		SpeechModel       *string  `json:"speechModel"`
-		SpeechVoice       *string  `json:"speechVoice"`
-		SpeechFormat      *string  `json:"speechFormat"`
-		SpeechSpeed       *float64 `json:"speechSpeed"`
-		AutoSpeak         *bool    `json:"autoSpeak"`
+		APIKey            *string   `json:"apiKey"`
+		BaseURL           *string   `json:"baseUrl"`
+		Model             *string   `json:"model"`
+		Temperature       *float64  `json:"temperature"`
+		MaxTokens         *int      `json:"maxTokens"`
+		MaxSteps          *int      `json:"maxSteps"`
+		ToolChoice        *string   `json:"toolChoice"`
+		SystemPrompt      *string   `json:"systemPrompt"`
+		ParallelToolCalls *bool     `json:"parallelToolCalls"`
+		ReasoningEffort   *string   `json:"reasoningEffort"`
+		ChoicesEnabled    *bool     `json:"choicesEnabled"`
+		DisabledTools     *[]string `json:"disabledTools"`
+		SpeechModel       *string   `json:"speechModel"`
+		SpeechVoice       *string   `json:"speechVoice"`
+		SpeechFormat      *string   `json:"speechFormat"`
+		SpeechSpeed       *float64  `json:"speechSpeed"`
+		AutoSpeak         *bool     `json:"autoSpeak"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, err)
@@ -86,6 +87,9 @@ func (s *Server) handlePutConfig(w http.ResponseWriter, r *http.Request) {
 		}
 		if body.ChoicesEnabled != nil {
 			c.ChoicesEnabled = *body.ChoicesEnabled
+		}
+		if body.DisabledTools != nil {
+			c.DisabledTools = cleanToolNames(*body.DisabledTools)
 		}
 		if body.SpeechModel != nil {
 			c.SpeechModel = strings.TrimSpace(*body.SpeechModel)
@@ -188,9 +192,8 @@ func fetchChatModels(ctx context.Context, baseURL, apiKey string) ([]chatModelIn
 			name = m.ID
 		}
 		maxOutput := m.TopProvider.MaxCompletionTokens
-		if maxOutput <= 0 {
-			maxOutput = m.ContextLength
-		}
+		// Leave it at zero when the provider reports no completion limit; the UI
+		// then keeps the user's own value instead of guessing a huge one.
 		out = append(out, chatModelInfo{
 			ID:        m.ID,
 			Name:      name,
@@ -476,7 +479,13 @@ func (s *Server) handlePatchSession(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDeleteSession(w http.ResponseWriter, r *http.Request) {
-	if err := s.store.Delete(r.PathValue("id")); err != nil {
+	id := r.PathValue("id")
+	// Wait for any in-flight turn: a running stream saves the session at the
+	// end, which would otherwise resurrect the directory we are deleting.
+	lock := s.store.TurnLock(id)
+	lock.Lock()
+	defer lock.Unlock()
+	if err := s.store.Delete(id); err != nil {
 		writeError(w, statusFor(err), err)
 		return
 	}

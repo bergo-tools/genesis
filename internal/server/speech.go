@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -74,7 +75,7 @@ func (s *Server) handleSpeech(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	voice := resolveVoice(sess, speaker, body.Voice, cfg.SpeechVoice)
-	name := speechAssetName(model, voice, cfg.SpeechFormat, text) + llm.SpeechExtension(cfg.SpeechFormat)
+	name := speechAssetName(model, voice, cfg.SpeechFormat, cfg.SpeechSpeed, text) + llm.SpeechExtension(cfg.SpeechFormat)
 
 	if !body.Force && s.store.AssetExists(id, name) {
 		s.serveAsset(w, id, name)
@@ -118,8 +119,9 @@ func (s *Server) serveAsset(w http.ResponseWriter, id, name string) {
 	_, _ = io.Copy(w, f)
 }
 
-func speechAssetName(model, voice, format, text string) string {
-	sum := sha1.Sum([]byte(model + "|" + voice + "|" + format + "|" + text))
+func speechAssetName(model, voice, format string, speed float64, text string) string {
+	key := model + "|" + voice + "|" + format + "|" + strconv.FormatFloat(speed, 'f', -1, 64) + "|" + text
+	sum := sha1.Sum([]byte(key))
 	return "speech-" + hex.EncodeToString(sum[:])[:20]
 }
 

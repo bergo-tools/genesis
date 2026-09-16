@@ -41,6 +41,7 @@ export function App({ initialAuth = null } = {}) {
   const speechRef = useRef({ current: null, queue: [], busy: false });
   const toastId = useRef(0);
   const bootedRef = useRef(false);
+  const streamTokenRef = useRef(0);
 
   useEffect(() => {
     sessionRef.current = session;
@@ -110,6 +111,13 @@ export function App({ initialAuth = null } = {}) {
     setAuth({ enabled: true, authenticated: false });
   }, []);
 
+  // Cancels any in-flight generation and invalidates its late events, so a
+  // turn started on one session can never land in another after switching.
+  const cancelStream = useCallback(() => {
+    streamTokenRef.current += 1;
+    if (abortRef.current) abortRef.current.abort();
+  }, []);
+
   const refreshSessions = useCallback(async () => {
     try {
       const data = await api.sessions();
@@ -120,6 +128,7 @@ export function App({ initialAuth = null } = {}) {
   }, []);
 
   const openSession = useCallback(async (id) => {
+    cancelStream();
     try {
       const data = await api.session(id);
       setSession(data);
@@ -133,7 +142,7 @@ export function App({ initialAuth = null } = {}) {
     } catch (err) {
       pushToast(err.message, 'error');
     }
-  }, [pushToast]);
+  }, [cancelStream, pushToast]);
 
   const handleEvent = useCallback((event) => {
     switch (event.type) {
@@ -216,9 +225,14 @@ export function App({ initialAuth = null } = {}) {
     if (abortRef.current) return;
     const controller = new AbortController();
     abortRef.current = controller;
+    // Events are only applied while this exact run is still the current one.
+    const token = (streamTokenRef.current += 1);
+    const emit = (event) => {
+      if (streamTokenRef.current === token) handleEvent(event);
+    };
     setStreaming(true);
     try {
-      await api.stream(path, body, handleEvent, controller.signal);
+      await api.stream(path, body, emit, controller.signal);
     } catch (err) {
       if (err.name !== 'AbortError') pushToast(err.message, 'error');
     } finally {
@@ -433,6 +447,7 @@ export function App({ initialAuth = null } = {}) {
   }, [pushToast]);
 
   const startSession = useCallback(async (data) => {
+    cancelStream();
     try {
       const created = await api.createSession(data);
       setModal(null);
@@ -451,7 +466,7 @@ export function App({ initialAuth = null } = {}) {
     } catch (err) {
       pushToast(err.message, 'error');
     }
-  }, [pushToast, refreshSessions, runStream]);
+  }, [cancelStream, pushToast, refreshSessions, runStream]);
 
   const savePreset = useCallback(async (data) => {
     try {
@@ -527,6 +542,7 @@ export function App({ initialAuth = null } = {}) {
   }, []);
 
   const createStory = useCallback(async (data) => {
+    cancelStream();
     try {
       const chars = (data.characters || []).filter((c) => (c.name || '').trim());
       const created = await api.createSession({
@@ -582,7 +598,7 @@ export function App({ initialAuth = null } = {}) {
     } catch (err) {
       pushToast(err.message, 'error');
     }
-  }, [pushToast, refreshSessions, runStream]);
+  }, [cancelStream, pushToast, refreshSessions, runStream]);
 
   const saveStory = useCallback(async (data) => {
     const current = sessionRef.current;
@@ -647,6 +663,7 @@ export function App({ initialAuth = null } = {}) {
       setSessions(list);
       const wasActive = sessionRef.current && sessionRef.current.id === target.id;
       if (wasActive) {
+        cancelStream();
         setSession(null);
         localStorage.removeItem(LS_KEY);
         if (list[0]) await openSession(list[0].id);
@@ -654,12 +671,13 @@ export function App({ initialAuth = null } = {}) {
     } catch (err) {
       pushToast(err.message, 'error');
     }
-  }, [openSession, pushToast]);
+  }, [cancelStream, openSession, pushToast]);
 
   const deleteCurrent = useCallback(async () => {
     const current = sessionRef.current;
     if (!current) return;
     if (!window.confirm('Delete this story and all of its images? This cannot be undone.')) return;
+    cancelStream();
     try {
       await api.deleteSession(current.id);
       setSession(null);
@@ -670,7 +688,7 @@ export function App({ initialAuth = null } = {}) {
     } catch (err) {
       pushToast(err.message, 'error');
     }
-  }, [openSession, pushToast]);
+  }, [cancelStream, openSession, pushToast]);
 
   useEffect(() => {
     if (!auth) return;

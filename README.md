@@ -234,7 +234,7 @@ func weatherTool() *agent.Tool {
 - **音色覆盖顺序**：请求显式 `voice` > 角色卡 `voice`（按 `speaker` 匹配）> 全局默认音色；
   旁白使用全局默认音色。
 - **可选自动朗读**：Settings 打开 `autoSpeak` 后，新消息按顺序自动朗读。
-- **缓存**：合成结果按 `模型|音色|格式|文本` 内容寻址缓存到该 story 的 `assets/` 下，
+- **缓存**：合成结果按 `模型|音色|格式|语速|文本` 内容寻址缓存到该 story 的 `assets/` 下，
   同一文本块重复朗读不会再次调用模型。
 
 端点：`POST /api/sessions/{id}/speech`，请求体 `{ text, speaker }` 或 `{ messageId }`，
@@ -246,7 +246,7 @@ func weatherTool() *agent.Tool {
   **没有 npm install、没有 bundler、没有构建步骤**；只把裸导入 `"preact"` 改成相对路径。
 - 模块划分：`api.js`（网络 + 资源上传 + NDJSON 流解析 + 401 处理）、`format.js`（转义与轻量 markdown）、
   `components.js`（纯展示组件与编辑器）、`login.js`（密码登录门）、`app.js`（根组件、hooks 状态、流事件、`mount()`）。
-- 图片选择、预览、上传在 `Composer`；多角色与头像编辑在 `NewStoryModal` / `CastModal`。
+- 图片选择、预览、上传在 `Composer`；多角色与头像编辑在 `NewSessionModal` / `PresetModal` / `StoryModal`（共用 `CharacterEditor`）。
 - 无浏览器冒烟测试：`web/test/render.test.mjs` 用 vendored 的 `preact-render-to-string`
   渲染整棵组件树并校验文案，由 `make test-web` 运行。
 

@@ -78,3 +78,22 @@ func TestPutConfigPersistsSpeechFields(t *testing.T) {
 		t.Fatalf("speechVoice should be cleared, got %q", got)
 	}
 }
+
+// Regression test: the Settings panel's tool switches are saved via
+// PUT /api/config, so disabledTools must be parsed there.
+func TestPutConfigPersistsDisabledTools(t *testing.T) {
+	srv, cfg := newTestServer(t)
+	if rec := putConfig(t, srv, `{"disabledTools":["scene","scene"," "]}`); rec.Code != http.StatusOK {
+		t.Fatalf("PUT /api/config = %d: %s", rec.Code, rec.Body.String())
+	}
+	if got := cfg.Get().DisabledTools; len(got) != 1 || got[0] != "scene" {
+		t.Fatalf("disabledTools not persisted/cleaned: %#v", got)
+	}
+	// An explicitly empty list must clear them.
+	if rec := putConfig(t, srv, `{"disabledTools":[]}`); rec.Code != http.StatusOK {
+		t.Fatalf("clearing tools failed: %d", rec.Code)
+	}
+	if got := cfg.Get().DisabledTools; len(got) != 0 {
+		t.Fatalf("disabledTools should be cleared, got %#v", got)
+	}
+}

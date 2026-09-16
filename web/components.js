@@ -471,7 +471,9 @@ export function SettingsModal({ config, onClose, onSave, chatModels, onReloadMod
   };
   const currentModel = (chatModels || []).find((m) => m.id === form.model);
   const modelHint = currentModel
-    ? 'context ' + Math.round(currentModel.context / 1000) + 'k · max output ' + Math.round(currentModel.maxOutput / 1000) + 'k'
+    ? 'context ' + Math.round((currentModel.context || 0) / 1000) + 'k · ' + (currentModel.maxOutput
+      ? 'max output ' + Math.round(currentModel.maxOutput / 1000) + 'k'
+      : 'provider does not report a max output')
     : (chatModels || []).length + ' models · ' + (chatModels || []).filter((m) => m.tools).length + ' support tools';
   const reload = async () => {
     setBusy(true);

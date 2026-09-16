@@ -24,14 +24,18 @@ func TestResolveVoice(t *testing.T) {
 }
 
 func TestSpeechAssetNameIsContentAddressed(t *testing.T) {
-	a := speechAssetName("openai/gpt-4o-mini-tts", "alloy", "mp3", "hello")
-	b := speechAssetName("openai/gpt-4o-mini-tts", "alloy", "mp3", "hello")
-	c := speechAssetName("openai/gpt-4o-mini-tts", "echo", "mp3", "hello")
+	a := speechAssetName("openai/gpt-4o-mini-tts", "alloy", "mp3", 1, "hello")
+	b := speechAssetName("openai/gpt-4o-mini-tts", "alloy", "mp3", 1, "hello")
+	c := speechAssetName("openai/gpt-4o-mini-tts", "echo", "mp3", 1, "hello")
+	d := speechAssetName("openai/gpt-4o-mini-tts", "alloy", "mp3", 1.5, "hello")
 	if a != b {
 		t.Fatal("identical input must produce the same cached name")
 	}
 	if a == c {
 		t.Fatal("a different voice must produce a different cached name")
+	}
+	if a == d {
+		t.Fatal("a different speed must produce a different cached name")
 	}
 	if !strings.HasPrefix(a, "speech-") {
 		t.Fatalf("unexpected asset name %q", a)
