@@ -459,10 +459,10 @@ export function SettingsModal({ config, onClose, onSave, chatModels, onReloadMod
             <label class="field"><span>Max steps</span>
               <input type="number" min="1" max="40" value=${form.maxSteps} onInput=${set('maxSteps')} /></label>
           </div>
-          <ReasoningSelect value=${form.reasoningEffort} onChange=${ (v) => setForm((f) => ({ ...f, reasoningEffort: v })) } />
+          <${ReasoningSelect} value=${form.reasoningEffort} onChange=${ (v) => setForm((f) => ({ ...f, reasoningEffort: v })) } />
           <hr />
           <strong>Tools</strong>
-          <ToolToggles
+          <${ToolToggles}
             tools=${tools}
             choicesEnabled=${form.choicesEnabled}
             disabledTools=${form.disabledTools}
@@ -625,7 +625,7 @@ export function NewStoryModal({ config, onClose, onCreate, chatModels, onLoadSpe
                        if (found && found.maxOutput) setMaxTokens(found.maxOutput);
                      } }
                      onInput=${ (e) => setModel(e.currentTarget.value) } /></label>
-            <ReasoningSelect value=${reasoningEffort} onChange=${setReasoningEffort} />
+            <${ReasoningSelect} value=${reasoningEffort} onChange=${setReasoningEffort} />
           </div>
           <datalist id="new-story-model-options">
             ${(chatModels || []).map((m) => html`<option value=${m.id} label=${modelLabel(m)} key=${m.id}></option>`)}
@@ -636,7 +636,7 @@ export function NewStoryModal({ config, onClose, onCreate, chatModels, onLoadSpe
             <span class="hint">auto-filled from the chosen model (OpenRouter's max)</span></label>
           <hr />
           <strong>Tools</strong>
-          <ToolToggles
+          <${ToolToggles}
             tools=${tools}
             choicesEnabled=${choicesEnabled}
             disabledTools=${disabledTools}

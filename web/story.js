@@ -113,7 +113,7 @@ export function StoryModal({ session, onClose, onSave, chatModels, speechModel, 
             ${(chatModels || []).map((m) => html`<option value=${m.id} label=${m.name + (m.tools ? ' · tools' : '')} key=${m.id}></option>`)}
           </datalist>
           <span class="hint">${modelHint}</span>
-          <ReasoningSelect value=${reasoningEffort} onChange=${setReasoningEffort} />
+          <${ReasoningSelect} value=${reasoningEffort} onChange=${setReasoningEffort} />
           <div class="row">
             <label class="field"><span>Temperature</span>
               <input type="number" min="0" max="2" step="0.05" value=${temperature}
@@ -131,7 +131,7 @@ export function StoryModal({ session, onClose, onSave, chatModels, speechModel, 
 
           <hr />
           <strong>Tools</strong>
-          <ToolToggles
+          <${ToolToggles}
             tools=${tools}
             choicesEnabled=${choicesEnabled}
             disabledTools=${disabledTools}
