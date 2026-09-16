@@ -71,8 +71,8 @@ func emberfallStory() *Story {
 			ReasoningEffort: "off",
 			ChoicesEnabled:  true,
 			SystemPrompt: "这是一场黑暗中世纪奇幻冒险。魔法罕见、危险，且正在苏醒。" +
-				"让施法有代价、让誓言与承诺被记住、让后果真实。用 update_state 记录玩家" +
-				"获得的信息、物品与承诺。控制节奏：每回合推进一个场景节拍，然后给玩家选择。",
+				"让施法有代价、让誓言与承诺被记住、让后果真实。用 scene 记录地点与环境，" +
+				"控制节奏：每回合推进一个场景节拍，然后给玩家选择。",
 		},
 		Scene: Scene{
 			Location:   "雾中的官道，距灰烬堡三日路程",

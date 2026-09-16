@@ -140,8 +140,7 @@ export function MessageList({ session, streaming, onNewStory, onSpeak, speakingI
         <div class="empty">
           <h2>Begin a story</h2>
           <p>Genesis is an agentic game master. Every beat is a tool call: the cast speaks and thinks
-             with message, tracks facts with update_state, sets the scene with scene, and hands you
-             the next branches with choices.</p>
+             with message, sets the scene with scene, and hands you the next branches with choices.</p>
           <p><button class="btn btn-primary" type="button" onClick=${onNewStory}>Create your first story</button></p>
         </div>
       </section>`;

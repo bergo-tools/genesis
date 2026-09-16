@@ -76,6 +76,14 @@ func sceneSummary(s store.Scene) string {
 	return text
 }
 
+func jsonBytes(v any) json.RawMessage {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return nil
+	}
+	return b
+}
+
 func apply(dst *string, value string) {
 	if v := strings.TrimSpace(value); v != "" {
 		*dst = v

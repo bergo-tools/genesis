@@ -7,12 +7,11 @@ OpenRouter 的 chat 接口由官方 SDK [`github.com/OpenRouterTeam/go-sdk`](htt
 
 ## 工具集（刻意保持精简）
 
-只有 4 个工具，后续扩展也只需注册即可：
+只有 3 个工具，后续扩展也只需注册即可：
 
 | 工具 | 作用 | 是否结束回合 |
 | --- | --- | --- |
 | `message` | 一个场景节拍：`text`（对白/动作/旁白）+ 可选 `thought`（角色内心想法，同块显示、颜色区分） | 否 |
-| `update_state` | 批量 tracking：一次传入多组 key-value（`changes` 数组或 `values` 映射），变更随本轮回复显示并持久保存 | 否 |
 | `scene` | 场景描写：location / time / weather / background / notes，只更新传入字段 | 否 |
 | `choices` | 输出场景描述 + 2–4 个后续选项，把控制权交还玩家；选项会持久保存，刷新后仍在 | **是（terminal）** |
 
@@ -27,9 +26,8 @@ story 的 Story settings 里逐个开关。
 
 ## 特性
 
-- **一切皆工具调用**，只有 4 个工具：message / think / update_state / choices。
+- **一切皆工具调用**：当前工具集为 message / scene / choices（`update_state` 暂缓，设计待定）。
 - **一段式消息**：`message` 的 text 与 thought 合并在同一个气泡里，内心想法用不同颜色与斜体区分。
-- **状态 tracking**：`update_state` 一次传入多组 key-value，改动会以紧凑的 tracker 块跟随本轮回复出现。
 - **场景栏**：`scene` 维护地点/时间/天气/背景，顶部场景栏实时更新。
 - **会话管理**：侧栏每个 session 都有删除按钮；`choices` 持久化在会话上，刷新页面不丢。
 - **Story 预设 + Session 会话**：Story 是可复用的预设（cast、开场、默认设置、种子状态），
@@ -92,7 +90,7 @@ internal/config/             配置加载/保存、.env 解析
 internal/llm/                中立的 Chat/工具类型 + 多模态 + OpenRouter SDK 适配
 internal/store/              数据模型、按 story 分目录的持久化与资源存储
 internal/agent/              工具注册表、事件、agent 循环、system prompt
-internal/tools/              message / think / update_state / choices
+internal/tools/              message / scene / choices
 internal/server/             HTTP 路由、NDJSON 流、图片上传/读取
 web/                         Preact + htm 前端（components / story / library / vendor）
 ```

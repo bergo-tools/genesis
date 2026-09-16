@@ -20,7 +20,6 @@ function check(name, out, needles) {
 const tools = [
   { name: 'message', description: 'say things', terminal: false, query: false },
   { name: 'think', description: 'inner thought', terminal: false, query: false },
-  { name: 'update_state', description: 'persist', terminal: false, query: false },
   { name: 'choices', description: 'end turn', terminal: true, query: false },
 ];
 const chatModels = [{ id: 'deepseek/deepseek-chat', name: 'DeepSeek', tools: true, context: 163840, maxOutput: 16000 }];

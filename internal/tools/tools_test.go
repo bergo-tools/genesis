@@ -41,37 +41,6 @@ func TestMessageMergesThought(t *testing.T) {
 	}
 }
 
-func TestUpdateStateTracksBatch(t *testing.T) {
-	sess := &store.Session{State: map[string]any{}}
-	var tracker map[string]any
-	tc := &agent.TurnContext{Session: sess, Emit: func(e agent.Event) {
-		if e.Tracker != nil {
-			tracker = e.Tracker
-		}
-	}}
-	tool := updateStateTool()
-	_, err := tool.Handler(context.Background(), tc, json.RawMessage(
-		`{"changes":[{"key":"inventory.gold","value":10},{"key":"flags.seen","op":"toggle"}],"values":{"cast.ilyra.trust":2}}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(tracker) != 3 {
-		t.Fatalf("expected 3 tracked keys, got %+v", tracker)
-	}
-	if v, _ := getPath(sess.State, "inventory.gold"); toFloatOrZero(v) != 10 {
-		t.Fatalf("gold = %v", v)
-	}
-	if v, _ := getPath(sess.State, "flags.seen"); v != true {
-		t.Fatalf("seen = %v", v)
-	}
-	if len(sess.Messages) != 1 || sess.Messages[0].Kind != store.KindState {
-		t.Fatalf("expected a tracker message, got %+v", sess.Messages)
-	}
-	if _, err := tool.Handler(context.Background(), tc, json.RawMessage(`{"changes":[]}`)); err == nil {
-		t.Fatal("expected an error when nothing changes")
-	}
-}
-
 func TestSceneToolUpdatesAndEmits(t *testing.T) {
 	sess := &store.Session{}
 	var got *store.Scene
@@ -107,9 +76,4 @@ func TestChoicesPersistOnSession(t *testing.T) {
 	if len(sess.PendingChoices) != 2 || sess.PendingPrompt != "门开了。" {
 		t.Fatalf("choices not persisted on the session: %+v", sess.PendingChoices)
 	}
-}
-
-func toFloatOrZero(v any) float64 {
-	f, _ := toFloat(v)
-	return f
 }
