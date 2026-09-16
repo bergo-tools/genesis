@@ -67,6 +67,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("stories: %v", err)
 	}
+	if err := store.MigrateLegacySessions(sessions, stories); err != nil {
+		log.Printf("migrate legacy sessions: %v", err)
+	}
 	if err := store.EnsureBuiltins(stories); err != nil {
 		log.Fatalf("builtin stories: %v", err)
 	}
