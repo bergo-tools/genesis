@@ -245,7 +245,6 @@ type Store struct {
 
 	mu        sync.RWMutex
 	summaries map[string]*SessionSummary
-	loaded    bool
 }
 
 // New opens the session repository rooted at dir.
@@ -257,38 +256,55 @@ func New(dir string) (*Store, error) {
 	return &Store{repo: r, summaries: map[string]*SessionSummary{}}, nil
 }
 
-// Summaries lists sessions for the sidebar. The first call scans the directory
-// once; after that the cache is maintained on every write.
+// Summaries lists sessions for the sidebar. It reads the directory (cheap) and
+// only parses sessions it has not seen, so deleting a session directory by hand
+// still makes it disappear without re-reading every transcript.
 func (s *Store) Summaries() ([]*SessionSummary, error) {
-	s.mu.RLock()
-	if s.loaded {
-		out := make([]*SessionSummary, 0, len(s.summaries))
-		for _, v := range s.summaries {
-			out = append(out, v.clone())
-		}
-		s.mu.RUnlock()
-		sortSummaries(out)
-		return out, nil
-	}
-	s.mu.RUnlock()
-
-	sessions, err := s.List()
+	ids, err := s.repo.ids()
 	if err != nil {
 		return nil, err
 	}
+	present := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		present[id] = true
+	}
+
 	s.mu.Lock()
-	s.summaries = make(map[string]*SessionSummary, len(sessions))
-	for _, sess := range sessions {
-		if sum := summarize(sess); sum != nil {
-			s.summaries[sess.ID] = sum
+	if s.summaries == nil {
+		s.summaries = map[string]*SessionSummary{}
+	}
+	// Forget sessions whose directory is gone.
+	for id := range s.summaries {
+		if !present[id] {
+			delete(s.summaries, id)
 		}
 	}
-	s.loaded = true
-	out := make([]*SessionSummary, 0, len(s.summaries))
-	for _, v := range s.summaries {
-		out = append(out, v.clone())
+	out := make([]*SessionSummary, 0, len(ids))
+	stale := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if sum, ok := s.summaries[id]; ok {
+			out = append(out, sum.clone())
+		} else {
+			stale = append(stale, id)
+		}
 	}
 	s.mu.Unlock()
+
+	for _, id := range stale {
+		var sess Session
+		if err := s.repo.load(id, &sess); err != nil {
+			continue
+		}
+		sum := summarize(&sess)
+		if sum == nil {
+			continue
+		}
+		s.mu.Lock()
+		s.summaries[id] = sum
+		s.mu.Unlock()
+		out = append(out, sum.clone())
+	}
+
 	sortSummaries(out)
 	return out, nil
 }

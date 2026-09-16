@@ -1,6 +1,10 @@
 package store
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 // Summaries must stay in step with writes without re-reading transcripts.
 func TestSummariesTrackWrites(t *testing.T) {
@@ -64,5 +68,13 @@ func TestSummariesTrackWrites(t *testing.T) {
 	list, _ = st.Summaries()
 	if len(list) != 1 || list[0].ID != "s2" {
 		t.Fatalf("delete not reflected: %+v", list)
+	}
+
+	// A directory removed by hand must also disappear from the list.
+	if err := os.RemoveAll(filepath.Join(st.Dir(), "s2")); err != nil {
+		t.Fatal(err)
+	}
+	if list, _ = st.Summaries(); len(list) != 0 {
+		t.Fatalf("hand-deleted session still listed: %+v", list)
 	}
 }
