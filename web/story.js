@@ -2,12 +2,11 @@ import { h } from './vendor/preact.module.js';
 import { useEffect, useState } from './vendor/hooks.module.js';
 import htm from './vendor/htm.module.js';
 import { assetURL } from './api.js';
-import { CharacterEditor, ToolToggles, ReasoningSelect } from './components.js';
-import { OptionPicker, modelOptions } from './picker.js';
+import { CharacterEditor } from './components.js';
 
 const html = htm.bind(h);
 
-export function StoryModal({ session, onClose, onSave, chatModels, speechModel, onLoadSpeechModels, tools }) {
+export function StoryModal({ session, onClose, onSave, speechModel, onLoadSpeechModels }) {
   const s = session || {};
   const settings = s.settings || {};
   const [speechModels, setSpeechModels] = useState([]);
@@ -28,14 +27,7 @@ export function StoryModal({ session, onClose, onSave, chatModels, speechModel, 
   const [avatar, setAvatar] = useState(s.avatar || '');
   const [avatarFile, setAvatarFile] = useState(null);
   const [avatarPreview, setAvatarPreview] = useState('');
-  const [model, setModel] = useState(s.model || '');
-  const [reasoningEffort, setReasoningEffort] = useState(settings.reasoningEffort || 'off');
-  const [temperature, setTemperature] = useState(settings.temperature != null ? settings.temperature : 1);
-  const [maxTokens, setMaxTokens] = useState(settings.maxTokens || 2048);
-  const [maxSteps, setMaxSteps] = useState(settings.maxSteps || 6);
   const [systemPrompt, setSystemPrompt] = useState(settings.systemPrompt || '');
-  const [choicesEnabled, setChoicesEnabled] = useState(settings.choicesEnabled !== false);
-  const [disabledTools, setDisabledTools] = useState(settings.disabledTools || []);
   const [characters, setCharacters] = useState(() => (s.characters || []).map((c) => ({
     key: 'c' + Math.random().toString(36).slice(2),
     id: c.id || '', name: c.name || '', description: c.description || '',
@@ -53,11 +45,6 @@ export function StoryModal({ session, onClose, onSave, chatModels, speechModel, 
       setAvatarPreview(URL.createObjectURL(file));
     }
   };
-  const pickModel = (id) => {
-    setModel(id);
-    const found = (chatModels || []).find((m) => m.id === id);
-    if (found && found.maxOutput) setMaxTokens(found.maxOutput);
-  };
   const save = async () => {
     setBusy(true);
     try {
@@ -65,29 +52,14 @@ export function StoryModal({ session, onClose, onSave, chatModels, speechModel, 
         title,
         avatar,
         avatarFile,
-        model,
         characters,
-        settings: {
-          reasoningEffort,
-          temperature: Number(temperature),
-          maxTokens: Number(maxTokens),
-          maxSteps: Number(maxSteps),
-          systemPrompt,
-          choicesEnabled,
-          disabledTools,
-        },
+        settings: { systemPrompt },
       });
     } finally {
       setBusy(false);
     }
   };
   const src = avatarPreview || (avatar && s.id ? assetURL(s.id, avatar) : '');
-  const appliedModel = (chatModels || []).find((m) => m.id === model);
-  const modelHint = appliedModel
-    ? ('context ' + Math.round((appliedModel.context || 0) / 1000) + 'k · ' + (appliedModel.maxOutput
-      ? 'max output ' + Math.round(appliedModel.maxOutput / 1000) + 'k'
-      : 'provider does not report a max output'))
-    : ((chatModels || []).length + ' models available');
 
   return html`
     <div class="modal" onClick=${ (e) => { if (e.target === e.currentTarget) onClose(); } }>
@@ -105,37 +77,10 @@ export function StoryModal({ session, onClose, onSave, chatModels, speechModel, 
           </div>
 
           <hr />
-          <strong>Model &amp; generation</strong>
-          <div class="row">
-            <div class="field grow"><span>Model</span>
-              <${OptionPicker} value=${model} options=${modelOptions(chatModels)} onChange=${pickModel}
-                placeholder="Select a model" title="Chat model" /></div>
-          </div>
-          <span class="hint">${modelHint}</span>
-          <${ReasoningSelect} value=${reasoningEffort} onChange=${setReasoningEffort} />
-          <div class="row">
-            <label class="field"><span>Temperature</span>
-              <input type="number" min="0" max="2" step="0.05" value=${temperature}
-                     onInput=${ (e) => setTemperature(e.currentTarget.value) } /></label>
-            <label class="field"><span>Max output tokens</span>
-              <input type="number" min="64" step="64" value=${maxTokens}
-                     onInput=${ (e) => setMaxTokens(e.currentTarget.value) } /></label>
-            <label class="field"><span>Max steps</span>
-              <input type="number" min="1" max="40" value=${maxSteps}
-                     onInput=${ (e) => setMaxSteps(e.currentTarget.value) } /></label>
-          </div>
           <label class="field"><span>Story instructions</span>
             <textarea rows="3" placeholder="Extra instructions for this story only."
                       value=${systemPrompt} onInput=${ (e) => setSystemPrompt(e.currentTarget.value) }></textarea></label>
-
-          <hr />
-          <strong>Tools</strong>
-          <${ToolToggles}
-            tools=${tools}
-            choicesEnabled=${choicesEnabled}
-            disabledTools=${disabledTools}
-            onChoices=${setChoicesEnabled}
-            onToggle=${ (name, on) => setDisabledTools((cur) => (on ? cur.filter((n) => n !== name) : cur.concat([name]))) } />
+          <p class="hint">Model, temperature and tool switches are global — change them in Settings.</p>
 
           <hr />
           <div>

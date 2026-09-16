@@ -16,7 +16,7 @@ func TestUsageEventCarriesSessionStats(t *testing.T) {
 		{ToolCalls: []llm.ToolCall{{ID: "2", Name: "finish", Arguments: "{}"}}},
 	}}
 	a := newTestAgent(t, client)
-	sess := &store.Session{ID: "abc", Settings: store.Settings{ChoicesEnabled: false, MaxSteps: 3}}
+	sess := &store.Session{ID: "abc"}
 	if err := a.store.Create(sess); err != nil {
 		t.Fatal(err)
 	}

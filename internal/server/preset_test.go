@@ -19,16 +19,15 @@ func doJSON(t *testing.T, srv *Server, method, path, body string) *httptest.Resp
 	return rec
 }
 
-// Regression test: a preset is content only. Even when a stale client sends
-// model and generation options, a session started from it must snapshot the
-// global config and inherit just the story instructions.
-func TestPresetDoesNotPinGeneration(t *testing.T) {
+// Regression test: model choice and generation options are global. A preset
+// may not pin them and neither may a session, even when a stale client sends
+// them. The only setting a story or session owns is its instructions.
+func TestGenerationOptionsAreGlobal(t *testing.T) {
 	srv, cfg := newTestServer(t)
 
 	if rec := putConfig(t, srv, `{"model":"global/model","temperature":0.5,"maxTokens":777,"maxSteps":4,"reasoningEffort":"low","choicesEnabled":true,"disabledTools":["scene"]}`); rec.Code != http.StatusOK {
 		t.Fatalf("PUT /api/config = %d: %s", rec.Code, rec.Body.String())
 	}
-	want := cfg.Get()
 
 	rec := doJSON(t, srv, http.MethodPost, "/api/stories", `{
       "title":"Pinned",
@@ -45,8 +44,11 @@ func TestPresetDoesNotPinGeneration(t *testing.T) {
 	if story.Settings.SystemPrompt != "be terse" {
 		t.Fatalf("story instructions not stored: %q", story.Settings.SystemPrompt)
 	}
+	if strings.Contains(rec.Body.String(), `"model"`) {
+		t.Fatalf("preset persisted a model: %s", rec.Body.String())
+	}
 
-	rec = doJSON(t, srv, http.MethodPost, "/api/sessions", `{"storyId":"`+story.ID+`"}`)
+	rec = doJSON(t, srv, http.MethodPost, "/api/sessions", "{\"storyId\":\""+story.ID+"\"}")
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("POST /api/sessions = %d: %s", rec.Code, rec.Body.String())
 	}
@@ -55,23 +57,30 @@ func TestPresetDoesNotPinGeneration(t *testing.T) {
 		t.Fatal(err)
 	}
 	id, _ := created["id"].(string)
+	if strings.Contains(rec.Body.String(), `"model"`) {
+		t.Fatalf("session persisted a model: %s", rec.Body.String())
+	}
+
+	// A stale client trying to pin generation options must not get them in.
+	rec = doJSON(t, srv, http.MethodPatch, "/api/sessions/"+id, `{"model":"hack/model","settings":{"temperature":1.7,"maxTokens":9,"systemPrompt":"new"}}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("PATCH /api/sessions = %d: %s", rec.Code, rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), `"model"`) {
+		t.Fatalf("patch persisted a model: %s", rec.Body.String())
+	}
+
 	sess, err := srv.store.Get(id)
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	if sess.Model != want.Model {
-		t.Fatalf("session model = %q, want global %q", sess.Model, want.Model)
+	if sess.Settings.SystemPrompt != "new" {
+		t.Fatalf("story instructions = %q, want %q", sess.Settings.SystemPrompt, "new")
 	}
-	if sess.Settings.Temperature != want.Temperature || sess.Settings.MaxTokens != want.MaxTokens ||
-		sess.Settings.MaxSteps != want.MaxSteps || sess.Settings.ReasoningEffort != want.ReasoningEffort ||
-		sess.Settings.ChoicesEnabled != want.ChoicesEnabled {
-		t.Fatalf("session generation = %#v, want global %#v", sess.Settings, want)
+	if got := cfg.Get().Model; got != "global/model" {
+		t.Fatalf("config model = %q, want global/model", got)
 	}
-	if len(sess.Settings.DisabledTools) != 1 || sess.Settings.DisabledTools[0] != "scene" {
-		t.Fatalf("session disabledTools = %#v, want [scene]", sess.Settings.DisabledTools)
-	}
-	if sess.Settings.SystemPrompt != "be terse" {
-		t.Fatalf("session story instructions = %q, want %q", sess.Settings.SystemPrompt, "be terse")
+	if got := cfg.Get().MaxTokens; got != 777 {
+		t.Fatalf("config maxTokens = %d, want 777", got)
 	}
 }

@@ -232,7 +232,6 @@ type SessionSummary struct {
 	StoryTitle   string    `json:"storyTitle,omitempty"`
 	Title        string    `json:"title"`
 	Avatar       string    `json:"avatar,omitempty"`
-	Model        string    `json:"model,omitempty"`
 	Characters   []string  `json:"characters"`
 	MessageCount int       `json:"messageCount"`
 	CreatedAt    time.Time `json:"createdAt"`
@@ -341,7 +340,6 @@ func summarize(sess *Session) *SessionSummary {
 		StoryTitle:   sess.StoryTitle,
 		Title:        title,
 		Avatar:       sess.Avatar,
-		Model:        sess.Model,
 		Characters:   sess.CharacterNames(),
 		MessageCount: len(sess.Messages),
 		CreatedAt:    sess.CreatedAt,

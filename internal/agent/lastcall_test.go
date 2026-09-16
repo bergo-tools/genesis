@@ -15,7 +15,7 @@ func TestLastCallEndsTurnWithoutChoices(t *testing.T) {
 		{ToolCalls: []llm.ToolCall{{ID: "2", Name: "finish", Arguments: "{}"}}},
 	}}
 	a := newTestAgent(t, client)
-	sess := &store.Session{ID: "abc", Settings: store.Settings{ChoicesEnabled: false, MaxSteps: 5}}
+	sess := &store.Session{ID: "abc"}
 	if err := a.store.Create(sess); err != nil {
 		t.Fatal(err)
 	}
@@ -35,8 +35,8 @@ func TestLastCallIgnoredWhileChoicesEnabled(t *testing.T) {
 		{ToolCalls: []llm.ToolCall{{ID: "1", Name: "say", Arguments: `{"text":"hi","last_call":true}`}}},
 		{ToolCalls: []llm.ToolCall{{ID: "2", Name: "choices", Arguments: "{}"}}},
 	}}
-	a := newTestAgent(t, client)
-	sess := &store.Session{ID: "abc", Settings: store.Settings{ChoicesEnabled: true, MaxSteps: 5}}
+	a := newTestAgentCfg(t, client, Config{ChoicesEnabled: true, MaxSteps: 5, Temperature: 1, MaxTokens: 256, ToolChoice: "auto"})
+	sess := &store.Session{ID: "abc"}
 	if err := a.store.Create(sess); err != nil {
 		t.Fatal(err)
 	}
@@ -50,15 +50,14 @@ func TestLastCallIgnoredWhileChoicesEnabled(t *testing.T) {
 
 func TestActiveToolsRespectsDisabled(t *testing.T) {
 	client := &fakeClient{}
-	a := newTestAgent(t, client)
-	sess := &store.Session{
-		ID:       "abc",
-		Settings: store.Settings{ChoicesEnabled: false, DisabledTools: []string{"lookup"}, MaxSteps: 1},
-	}
+	a := newTestAgentCfg(t, client, Config{
+		ToolChoice: "auto", MaxSteps: 1, DisabledTools: []string{"lookup"},
+	})
+	sess := &store.Session{ID: "abc"}
 	if err := a.store.Create(sess); err != nil {
 		t.Fatal(err)
 	}
-	for _, tool := range a.activeTools(sess) {
+	for _, tool := range a.activeTools() {
 		if tool.Name == "lookup" || tool.Name == "choices" {
 			t.Fatalf("tool %q should not be active", tool.Name)
 		}

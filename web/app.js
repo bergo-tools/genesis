@@ -428,24 +428,8 @@ export function App({ initialAuth = null } = {}) {
     try {
       const saved = await api.saveConfig(body);
       setConfig(saved);
-      const current = sessionRef.current;
-      if (current) {
-        // Global Settings are the defaults; keep the open story in step with
-        // them so saving visibly takes effect instead of silently doing nothing.
-        const updated = await api.patchSession(current.id, {
-          model: saved.model,
-          settings: {
-            temperature: saved.temperature,
-            maxTokens: saved.maxTokens,
-            maxSteps: saved.maxSteps,
-            toolChoice: saved.toolChoice,
-            reasoningEffort: saved.reasoningEffort,
-            choicesEnabled: saved.choicesEnabled,
-            disabledTools: saved.disabledTools,
-          },
-        });
-        setSession(updated);
-      }
+      // Sessions read the model and generation options from the config on every
+      // turn, so nothing has to be copied onto the open story.
       pushToast('Settings saved.');
       setModal(null);
     } catch (err) {
@@ -607,7 +591,6 @@ export function App({ initialAuth = null } = {}) {
       const updated = await api.patchSession(current.id, {
         title: data.title,
         avatar,
-        model: data.model,
         characters,
         settings: data.settings,
       });
@@ -763,6 +746,7 @@ export function App({ initialAuth = null } = {}) {
         <${C.Topbar}
           session=${session}
           models=${chatModels}
+          model=${config && config.model}
           onMenu=${() => setSidebarOpen((v) => !v)}
           onPanel=${() => setPanelOpen((v) => !v)}
         />
@@ -786,6 +770,7 @@ export function App({ initialAuth = null } = {}) {
         activity=${activity}
         open=${panelOpen}
         models=${chatModels}
+        model=${config && config.model}
         onClose=${() => setPanelOpen(false)}
         onEditCast=${() => setModal('story')}
       />
@@ -803,8 +788,8 @@ export function App({ initialAuth = null } = {}) {
         <${PresetModal} story=${editingStory} onClose=${() => setModal(null)} onSave=${savePreset} />`}
       ${modal === 'story' && session && html`
         <${StoryModal} session=${session} onClose=${() => setModal(null)} onSave=${saveStory}
-                       chatModels=${chatModels} speechModel=${config && config.speechModel}
-                       onLoadSpeechModels=${loadSpeechModels} tools=${allTools} />`}
+                       speechModel=${config && config.speechModel}
+                       onLoadSpeechModels=${loadSpeechModels} />`}
       ${modal === 'tools' && html`
         <${C.ToolsModal} tools=${tools} onClose=${() => setModal(null)} />`}
       <${C.Toasts} toasts=${toasts} />

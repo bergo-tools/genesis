@@ -15,8 +15,8 @@ func TestDisabledToolCallIsRefused(t *testing.T) {
 		{ToolCalls: []llm.ToolCall{{ID: "1", Name: "lookup", Arguments: "{}"}}},
 		{ToolCalls: []llm.ToolCall{{ID: "2", Name: "finish", Arguments: "{}"}}},
 	}}
-	a := newTestAgent(t, client)
-	sess := &store.Session{ID: "abc", Settings: store.Settings{DisabledTools: []string{"lookup"}, MaxSteps: 3}}
+	a := newTestAgentCfg(t, client, Config{ToolChoice: "auto", MaxSteps: 3, DisabledTools: []string{"lookup"}})
+	sess := &store.Session{ID: "abc"}
 	if err := a.store.Create(sess); err != nil {
 		t.Fatal(err)
 	}
@@ -46,11 +46,8 @@ func TestDisabledChoicesCannotEndTurn(t *testing.T) {
 		{ToolCalls: []llm.ToolCall{{ID: "1", Name: "choices", Arguments: "{}"}}},
 		{ToolCalls: []llm.ToolCall{{ID: "2", Name: "finish", Arguments: "{}"}}},
 	}}
-	a := newTestAgent(t, client)
-	sess := &store.Session{
-		ID:       "abc",
-		Settings: store.Settings{ChoicesEnabled: false, DisabledTools: []string{"choices"}, MaxSteps: 3},
-	}
+	a := newTestAgentCfg(t, client, Config{ToolChoice: "auto", MaxSteps: 3, DisabledTools: []string{"choices"}})
+	sess := &store.Session{ID: "abc"}
 	if err := a.store.Create(sess); err != nil {
 		t.Fatal(err)
 	}

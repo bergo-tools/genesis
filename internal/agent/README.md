@@ -7,7 +7,9 @@ agent 循环：模型的一切输出都是工具调用，这里负责把它们�
 - `context.go`：`Event`（发给浏览器的 NDJSON 事件）和 `TurnContext`（工具运行时上下文：
   读写会话、emit 事件、`Show` 追加并广播消息）。
 - `agent.go`：`Continue` 主循环。每个 step：组请求 → 执行工具 → 判断是否收尾。
-  - `activeTools`：按 story 的 `disabledTools` 与 `choicesEnabled` 过滤。被禁用的工具不会执行，
+  - 生成参数（模型、温度、token 上限、tool choice、思考强度、工具开关）全部来自全局 config，
+    会话不存这些值，所以改 Settings 对进行中的会话也立即生效。
+  - `activeTools`：按全局 `disabledTools` 与 `choicesEnabled` 过滤。被禁用的工具不会执行，
     也不能用 `last_call` / `terminal` / `choices` 结束回合。
   - choices 启用时强制在回合末尾调用，缺失会自动提醒并继续（最多 2 次）。
   - choices 未启用时，`last_call=true` 结束回合。

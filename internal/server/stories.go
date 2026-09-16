@@ -18,16 +18,9 @@ type storyInput struct {
 	Opening     *string          `json:"opening"`
 	Persona     *store.Persona   `json:"persona"`
 	Characters  []characterInput `json:"characters"`
-	Settings    *storySettings   `json:"settings"`
+	Settings    *contentSettings `json:"settings"`
 	State       map[string]any   `json:"state"`
 	Scene       *store.Scene     `json:"scene"`
-}
-
-// storySettings is the only part of a preset's settings the API still accepts.
-// Generation options (model, temperature, token budgets, tool switches) are
-// global or per-session, so a preset must not pin them.
-type storySettings struct {
-	SystemPrompt *string `json:"systemPrompt"`
 }
 
 func applyStoryInput(st *store.Story, in *storyInput) {
@@ -67,9 +60,7 @@ func applyStoryInput(st *store.Story, in *storyInput) {
 	if in.Scene != nil {
 		st.Scene = *in.Scene
 	}
-	if in.Settings != nil && in.Settings.SystemPrompt != nil {
-		st.Settings.SystemPrompt = strings.TrimSpace(*in.Settings.SystemPrompt)
-	}
+	applyContentSettings(&st.Settings, in.Settings)
 }
 
 func (s *Server) handleListStories(w http.ResponseWriter, _ *http.Request) {

@@ -5,15 +5,16 @@ import { formatTokens } from './format.js';
 const html = htm.bind(h);
 
 // contextFor finds the model's context window, when the catalog is loaded.
-function contextFor(session, models) {
-  const model = (models || []).find((m) => m.id === (session && session.model));
-  return (model && model.context) || 0;
+// The model id is global, so it is passed in rather than read off the session.
+function contextFor(model, models) {
+  const found = (models || []).find((m) => m.id === model);
+  return (found && found.context) || 0;
 }
 
 // TokenStatus is the compact context gauge shown in the top bar.
-export function TokenStatus({ session, models }) {
+export function TokenStatus({ session, models, model }) {
   const tokens = (session && session.tokens) || {};
-  const limit = contextFor(session, models);
+  const limit = contextFor(model, models);
   const used = tokens.lastPromptTokens || 0;
   const pct = limit && used ? Math.min(100, Math.round((used / limit) * 100)) : 0;
   const level = pct >= 90 ? ' danger' : pct >= 70 ? ' warn' : '';
@@ -29,9 +30,9 @@ export function TokenStatus({ session, models }) {
 }
 
 // TokenPanel is the detailed breakdown inside the world panel.
-export function TokenPanel({ session, models }) {
+export function TokenPanel({ session, models, model }) {
   const tokens = (session && session.tokens) || {};
-  const limit = contextFor(session, models);
+  const limit = contextFor(model, models);
   const used = tokens.lastPromptTokens || 0;
   const total = (tokens.totalPromptTokens || 0) + (tokens.totalCompletionTokens || 0);
   const context = used

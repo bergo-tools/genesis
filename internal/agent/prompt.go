@@ -38,7 +38,7 @@ func (a *Agent) SystemPrompt(sess *store.Session) string {
 	var b strings.Builder
 	b.WriteString(agentPreamble)
 
-	active := a.activeTools(sess)
+	active := a.activeTools()
 
 	b.WriteString("\n# Tools you may call\n")
 	for _, t := range active {

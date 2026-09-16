@@ -66,6 +66,8 @@ func (s *Server) agentConfig() agent.Config {
 		SystemPrompt:      c.SystemPrompt,
 		ParallelToolCalls: c.ParallelToolCalls,
 		ReasoningEffort:   c.ReasoningEffort,
+		ChoicesEnabled:    c.ChoicesEnabled,
+		DisabledTools:     c.DisabledTools,
 	}
 }
 

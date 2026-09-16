@@ -283,10 +283,10 @@ export function Sidebar({ sessions, activeId, open, auth, onOpen, onNew, onSetti
     </aside>`;
 }
 
-export function Topbar({ session, models, onMenu, onPanel }) {
+export function Topbar({ session, models, model, onMenu, onPanel }) {
   const bits = [];
   if (session && session.storyTitle) bits.push(session.storyTitle);
-  if (session && session.model) bits.push(session.model);
+  if (model) bits.push(model);
   if (session && session.characters && session.characters.length) bits.push(session.characters.map((c) => c.name).join(', '));
   return html`
     <header class="topbar">
@@ -298,12 +298,12 @@ export function Topbar({ session, models, onMenu, onPanel }) {
         <span id="chat-title">${(session && session.title) || 'Genesis'}</span>
         <small id="chat-subtitle">${bits.join(' · ') || 'agentic roleplay'}</small>
       </div>
-      <${TokenStatus} session=${session} models=${models} />
+      <${TokenStatus} session=${session} models=${models} model=${model} />
       <button class="icon-btn" type="button" aria-label="Toggle world panel" onClick=${onPanel}>◧</button>
     </header>`;
 }
 
-export function Panel({ session, activity, open, models, onClose, onEditCast }) {
+export function Panel({ session, activity, open, models, model, onClose, onEditCast }) {
   const chars = (session && session.characters) || [];
   return html`
     <aside class=${'panel' + (open ? ' open' : '')} aria-label="World state">
@@ -312,7 +312,7 @@ export function Panel({ session, activity, open, models, onClose, onEditCast }) 
         <button class="icon-btn" type="button" aria-label="Close" onClick=${onClose}>×</button>
       </div>
       <div class="panel-body">
-        <${TokenPanel} session=${session} models=${models} />
+        <${TokenPanel} session=${session} models=${models} model=${model} />
         <section class="panel-section">
           <div class="panel-head" style="padding:0;border:none">
             <h3 style="margin:0">Cast</h3>
@@ -581,7 +581,7 @@ export function SettingsModal({ config, onClose, onSave, chatModels, onReloadMod
           <label class="field"><span>Global director instructions</span>
             <textarea rows="4" placeholder="Extra standing instructions appended to every system prompt."
                       value=${form.systemPrompt} onInput=${set('systemPrompt')}></textarea></label>
-          <p class="hint">Saving also applies the model and generation settings to the story you have open.</p>
+          <p class="hint">Model and generation settings are global: saving applies them to every story, including the one you have open.</p>
         </div>
         <footer class="modal-foot">
           <button class="btn btn-ghost" type="button" onClick=${onClose}>Cancel</button>

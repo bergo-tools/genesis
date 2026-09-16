@@ -8,8 +8,10 @@ import (
 	"github.com/zp/genesis/internal/llm"
 )
 
-// Session is one conversation: the cast and defaults snapshotted from a
-// story preset, plus this playthrough's transcript and world state.
+// Session is one conversation: the cast and story instructions snapshotted
+// from a preset, plus this playthrough's transcript and world state. Model and
+// generation options are not stored here — they are read from the global
+// config on every turn, so a Settings change applies to running stories too.
 type Session struct {
 	ID string `json:"id"`
 	// StoryID is the preset this conversation was started from.
@@ -19,7 +21,6 @@ type Session struct {
 	Avatar     string         `json:"avatar,omitempty"`
 	CreatedAt  time.Time      `json:"createdAt"`
 	UpdatedAt  time.Time      `json:"updatedAt"`
-	Model      string         `json:"model,omitempty"`
 	Settings   Settings       `json:"settings"`
 	Persona    Persona        `json:"persona"`
 	Characters []*Character   `json:"characters"`
@@ -40,8 +41,8 @@ type Session struct {
 }
 
 // Story is a reusable preset: a cast, an opening, and its story instructions.
-// A preset never carries generation options — those come from the global
-// config or, once a session exists, from that session's own settings.
+// Neither a preset nor a session carries generation options — model choice,
+// temperature, token budgets and tool switches are global (internal/config).
 type Story struct {
 	ID          string         `json:"id"`
 	Title       string         `json:"title"`
@@ -51,7 +52,7 @@ type Story struct {
 	Opening     string         `json:"opening,omitempty"`
 	Persona     Persona        `json:"persona,omitempty"`
 	Characters  []*Character   `json:"characters"`
-	Settings    StorySettings  `json:"settings"`
+	Settings    Settings       `json:"settings"`
 	State       map[string]any `json:"state,omitempty"`
 	Scene       Scene          `json:"scene,omitempty"`
 	Builtin     bool           `json:"builtin,omitempty"`
@@ -59,26 +60,12 @@ type Story struct {
 	UpdatedAt   time.Time      `json:"updatedAt"`
 }
 
-// StorySettings is the content-level configuration a preset may carry. It
-// keeps the "settings"/"systemPrompt" shape so presets written before presets
-// stopped pinning generation options still load; their extra keys are ignored.
-type StorySettings struct {
-	SystemPrompt string `json:"systemPrompt,omitempty"`
-}
-
-// Settings holds generation options. A session snapshots the global config
-// into it when it starts, so later config edits never rewrite a live story.
+// Settings is the content-level configuration shared by presets and sessions.
+// The only option it holds is the story instructions. The JSON shape stays
+// "settings"/"systemPrompt", so records written when sessions still pinned
+// model and generation options load unchanged; those extra keys are ignored.
 type Settings struct {
-	Temperature     float64 `json:"temperature"`
-	MaxTokens       int     `json:"maxTokens"`
-	MaxSteps        int     `json:"maxSteps"`
-	ToolChoice      string  `json:"toolChoice"`
-	SystemPrompt    string  `json:"systemPrompt,omitempty"`
-	ReasoningEffort string  `json:"reasoningEffort,omitempty"`
-	ChoicesEnabled  bool    `json:"choicesEnabled"`
-	// DisabledTools lists tool names switched off for this story. An empty
-	// list means every registered tool is available.
-	DisabledTools []string `json:"disabledTools,omitempty"`
+	SystemPrompt string `json:"systemPrompt,omitempty"`
 }
 
 // Persona describes the player.

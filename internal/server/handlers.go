@@ -224,46 +224,18 @@ func (s *Server) handleTools(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"tools": s.registry.Meta()})
 }
 
-// settingsInput distinguishes "absent" from a zero value.
-type settingsInput struct {
-	Temperature     *float64  `json:"temperature"`
-	MaxTokens       *int      `json:"maxTokens"`
-	MaxSteps        *int      `json:"maxSteps"`
-	ToolChoice      *string   `json:"toolChoice"`
-	SystemPrompt    *string   `json:"systemPrompt"`
-	ReasoningEffort *string   `json:"reasoningEffort"`
-	ChoicesEnabled  *bool     `json:"choicesEnabled"`
-	DisabledTools   *[]string `json:"disabledTools"`
+// contentSettings is the only settings shape a story or session accepts: the
+// story instructions. Model choice and generation options are global, set once
+// through PUT /api/config, so they cannot be pinned per story.
+type contentSettings struct {
+	SystemPrompt *string `json:"systemPrompt"`
 }
 
-func applySettings(dst *store.Settings, in *settingsInput) {
-	if dst == nil || in == nil {
+func applyContentSettings(dst *store.Settings, in *contentSettings) {
+	if dst == nil || in == nil || in.SystemPrompt == nil {
 		return
 	}
-	if in.Temperature != nil && *in.Temperature > 0 {
-		dst.Temperature = *in.Temperature
-	}
-	if in.MaxTokens != nil && *in.MaxTokens > 0 {
-		dst.MaxTokens = *in.MaxTokens
-	}
-	if in.MaxSteps != nil && *in.MaxSteps > 0 {
-		dst.MaxSteps = *in.MaxSteps
-	}
-	if in.ToolChoice != nil && strings.TrimSpace(*in.ToolChoice) != "" {
-		dst.ToolChoice = strings.TrimSpace(*in.ToolChoice)
-	}
-	if in.SystemPrompt != nil {
-		dst.SystemPrompt = *in.SystemPrompt
-	}
-	if in.ReasoningEffort != nil {
-		dst.ReasoningEffort = strings.TrimSpace(*in.ReasoningEffort)
-	}
-	if in.ChoicesEnabled != nil {
-		dst.ChoicesEnabled = *in.ChoicesEnabled
-	}
-	if in.DisabledTools != nil {
-		dst.DisabledTools = cleanToolNames(*in.DisabledTools)
-	}
+	dst.SystemPrompt = strings.TrimSpace(*in.SystemPrompt)
 }
 
 func cleanToolNames(in []string) []string {
@@ -360,22 +332,19 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 		StoryID    string           `json:"storyId"`
 		Title      string           `json:"title"`
 		Avatar     string           `json:"avatar"`
-		Model      string           `json:"model"`
 		Persona    *store.Persona   `json:"persona"`
 		Characters []characterInput `json:"characters"`
 		Greeting   string           `json:"greeting"`
-		Settings   *settingsInput   `json:"settings"`
+		Settings   *contentSettings `json:"settings"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
 	sess := &store.Session{
-		Title:    strings.TrimSpace(body.Title),
-		Avatar:   strings.TrimSpace(body.Avatar),
-		Model:    strings.TrimSpace(body.Model),
-		Settings: defaultSettings(s.cfg.Get()),
-		State:    map[string]any{},
+		Title:  strings.TrimSpace(body.Title),
+		Avatar: strings.TrimSpace(body.Avatar),
+		State:  map[string]any{},
 	}
 	opening := strings.TrimSpace(body.Greeting)
 
@@ -390,12 +359,7 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 		sess.Avatar = st.Avatar
 		sess.Scene = st.Scene
 		sess.Persona = st.Persona
-		// A preset carries content, not generation options: the session keeps
-		// the global defaults snapshotted above and inherits only the preset's
-		// story instructions.
-		if instructions := strings.TrimSpace(st.Settings.SystemPrompt); instructions != "" {
-			sess.Settings.SystemPrompt = instructions
-		}
+		sess.Settings.SystemPrompt = strings.TrimSpace(st.Settings.SystemPrompt)
 		sess.Characters = cloneCharacters(st.Characters)
 		sess.State = cloneState(st.State)
 		if sess.Title == "" {
@@ -416,12 +380,7 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 	if body.Avatar != "" {
 		sess.Avatar = strings.TrimSpace(body.Avatar)
 	}
-	// The model is global: a new session pins the current one instead of
-	// leaving it empty, so a later config change cannot retarget this story.
-	if strings.TrimSpace(sess.Model) == "" {
-		sess.Model = strings.TrimSpace(s.cfg.Get().Model)
-	}
-	applySettings(&sess.Settings, body.Settings)
+	applyContentSettings(&sess.Settings, body.Settings)
 
 	if opening != "" {
 		speaker := "Narrator"
@@ -468,11 +427,10 @@ func (s *Server) handlePatchSession(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Title      *string          `json:"title"`
 		Avatar     *string          `json:"avatar"`
-		Model      *string          `json:"model"`
 		Persona    *store.Persona   `json:"persona"`
 		Characters []characterInput `json:"characters"`
 		State      map[string]any   `json:"state"`
-		Settings   *settingsInput   `json:"settings"`
+		Settings   *contentSettings `json:"settings"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, err)
@@ -483,9 +441,6 @@ func (s *Server) handlePatchSession(w http.ResponseWriter, r *http.Request) {
 	}
 	if body.Avatar != nil {
 		sess.Avatar = strings.TrimSpace(*body.Avatar)
-	}
-	if body.Model != nil {
-		sess.Model = strings.TrimSpace(*body.Model)
 	}
 	if body.Persona != nil {
 		sess.Persona = *body.Persona
@@ -502,7 +457,7 @@ func (s *Server) handlePatchSession(w http.ResponseWriter, r *http.Request) {
 		}
 		sess.Characters = chars
 	}
-	applySettings(&sess.Settings, body.Settings)
+	applyContentSettings(&sess.Settings, body.Settings)
 	if err := s.store.Save(sess); err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
@@ -872,18 +827,6 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
-}
-
-func defaultSettings(cfg config.Config) store.Settings {
-	return store.Settings{
-		Temperature:     cfg.Temperature,
-		MaxTokens:       cfg.MaxTokens,
-		MaxSteps:        cfg.MaxSteps,
-		ToolChoice:      cfg.ToolChoice,
-		ReasoningEffort: cfg.ReasoningEffort,
-		ChoicesEnabled:  cfg.ChoicesEnabled,
-		DisabledTools:   cfg.DisabledTools,
-	}
 }
 
 // copyPresetAssets copies the preset images a new session references (the story

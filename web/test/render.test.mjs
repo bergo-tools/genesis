@@ -60,7 +60,7 @@ const chat = renderToString(h(MessageList, {
 }));
 const app = renderToString(h(App, { initialAuth: { enabled: false, authenticated: true } }));
 const settings = renderToString(h(SettingsModal, { config: {}, tools, chatModels, disabledTools: [] }));
-const sessionSettings = renderToString(h(StoryModal, { session, tools, chatModels, disabledTools: [] }));
+const sessionSettings = renderToString(h(StoryModal, { session }));
 const newSession = renderToString(h(NewSessionModal, { stories }));
 const storiesModal = renderToString(h(StoriesModal, { stories }));
 const preset = renderToString(h(PresetModal, { story: null }));
@@ -71,8 +71,8 @@ const tokenSession = {
   tokens: { lastPromptTokens: 5000, lastCachedTokens: 2000, totalPromptTokens: 12000, totalCompletionTokens: 800, requests: 3, totalCost: 0.0123 },
 };
 const tokenModels = [{ id: 'x/y', context: 20000, maxOutput: 4000 }];
-const tokenStatus = renderToString(h(TokenStatus, { session: tokenSession, models: tokenModels }));
-const tokenPanel = renderToString(h(TokenPanel, { session: tokenSession, models: tokenModels }));
+const tokenStatus = renderToString(h(TokenStatus, { session: tokenSession, models: tokenModels, model: 'x/y' }));
+const tokenPanel = renderToString(h(TokenPanel, { session: tokenSession, models: tokenModels, model: 'x/y' }));
 const pickerOptions = modelOptions(chatModels);
 const picker = renderToString(h(OptionPicker, {
   value: 'deepseek/deepseek-chat',
@@ -84,7 +84,8 @@ const picker = renderToString(h(OptionPicker, {
 const total = check('MessageList', chat, ['hello there', 'well met', '✎', '↻'])
   + check('App', app, ['Genesis', 'Begin a story', 'Create a story to start…', 'agentic roleplay'])
   + check('SettingsModal', settings, ['tool-toggles', 'toggle-row', 'picker-trigger', '<select'])
-  + check('StoryModal', sessionSettings, ['tool-toggles', 'picker-trigger', '<select'])
+  + check('StoryModal', sessionSettings, ['Story settings', 'Story instructions', '+ Add character', 'picker-trigger'])
+  + deny('StoryModal', sessionSettings, ['tool-toggles', '<select', 'Temperature', 'Max output tokens'])
   + check('NewSessionModal', newSession, ['preset-card', 'New session', 'Emberfall', 'width:40px;height:40px', '<img', 'custom1/assets/cover.png'])
   + check('StoriesModal', storiesModal, ['preset-list', 'preset-row', 'New preset', 'Start'])
   + check('PresetModal', preset, ['New preset', 'Opening message', 'Story instructions', '+ Add character'])

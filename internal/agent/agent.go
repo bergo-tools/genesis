@@ -42,6 +42,10 @@ type Config struct {
 	SystemPrompt      string
 	ParallelToolCalls bool
 	ReasoningEffort   string
+	// ChoicesEnabled and DisabledTools are global too: a session cannot switch
+	// a tool on or off for itself.
+	ChoicesEnabled bool
+	DisabledTools  []string
 }
 
 // Agent runs the tool-calling loop that drives every roleplay turn.
@@ -76,33 +80,20 @@ func (a *Agent) Continue(ctx context.Context, sess *store.Session, emit func(Eve
 	}
 	cfg := a.config()
 
-	steps := sess.Settings.MaxSteps
-	if steps <= 0 {
-		steps = cfg.MaxSteps
-	}
+	// Generation options are global: every session follows the current
+	// config, so editing Settings changes the next turn everywhere.
+	steps := cfg.MaxSteps
 	if steps <= 0 {
 		steps = 6
 	}
-	toolChoice := llm.ToolChoice(strings.TrimSpace(sess.Settings.ToolChoice))
-	if toolChoice == "" {
-		toolChoice = llm.ToolChoice(strings.TrimSpace(cfg.ToolChoice))
-	}
+	toolChoice := llm.ToolChoice(strings.TrimSpace(cfg.ToolChoice))
 	if toolChoice == "" {
 		toolChoice = llm.ToolChoiceAuto
 	}
-	temp := sess.Settings.Temperature
-	if temp == 0 {
-		temp = cfg.Temperature
-	}
-	maxTokens := sess.Settings.MaxTokens
-	if maxTokens <= 0 {
-		maxTokens = cfg.MaxTokens
-	}
-	reasoning := strings.TrimSpace(sess.Settings.ReasoningEffort)
-	if reasoning == "" {
-		reasoning = cfg.ReasoningEffort
-	}
-	active := a.activeTools(sess)
+	temp := cfg.Temperature
+	maxTokens := cfg.MaxTokens
+	reasoning := strings.TrimSpace(cfg.ReasoningEffort)
+	active := a.activeTools()
 	choicesRequired := hasTool(active, "choices")
 	allowed := make(map[string]bool, len(active))
 	for _, t := range active {
@@ -120,7 +111,7 @@ func (a *Agent) Continue(ctx context.Context, sess *store.Session, emit func(Eve
 		emit(Event{Type: EventStatus, Status: "thinking", Step: step})
 
 		resp, err := client.Complete(ctx, llm.Request{
-			Model:             sess.Model,
+			Model:             cfg.Model,
 			Messages:          a.buildMessages(sess),
 			Tools:             toolDefs(active),
 			ToolChoice:        toolChoice,
@@ -234,16 +225,15 @@ func (a *Agent) Continue(ctx context.Context, sess *store.Session, emit func(Eve
 	return nil
 }
 
-// activeTools returns the tools exposed to the model for this story, honouring
-// the per-story disabled list and the choices toggle.
-func (a *Agent) activeTools(sess *store.Session) []*Tool {
+// activeTools returns the tools exposed to the model, honouring the global
+// disabled list and the choices toggle.
+func (a *Agent) activeTools() []*Tool {
+	cfg := a.config()
 	disabled := map[string]bool{}
-	if sess != nil {
-		for _, name := range sess.Settings.DisabledTools {
-			disabled[strings.TrimSpace(name)] = true
-		}
+	for _, name := range cfg.DisabledTools {
+		disabled[strings.TrimSpace(name)] = true
 	}
-	choicesOn := sess != nil && sess.Settings.ChoicesEnabled && !disabled["choices"]
+	choicesOn := cfg.ChoicesEnabled && !disabled["choices"]
 	out := make([]*Tool, 0, len(a.registry.All()))
 	for _, t := range a.registry.All() {
 		if disabled[t.Name] {

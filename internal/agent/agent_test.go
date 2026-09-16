@@ -28,6 +28,15 @@ func (f *fakeClient) Complete(_ context.Context, req llm.Request) (*llm.Response
 
 func newTestAgent(t *testing.T, client llm.Client) *Agent {
 	t.Helper()
+	return newTestAgentCfg(t, client, Config{
+		ToolChoice: "auto", MaxSteps: 5, Temperature: 1, MaxTokens: 256, ParallelToolCalls: true,
+	})
+}
+
+// newTestAgentCfg lets a test choose the global configuration. Model choice and
+// generation options live there now, not on the session.
+func newTestAgentCfg(t *testing.T, client llm.Client, cfg Config) *Agent {
+	t.Helper()
 	st, err := store.New(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -64,9 +73,7 @@ func newTestAgent(t *testing.T, client llm.Client) *Agent {
 			return map[string]any{"ok": true}, nil
 		},
 	})
-	return New(st, reg, func() (llm.Client, error) { return client, nil }, func() Config {
-		return Config{ToolChoice: "auto", MaxSteps: 5, Temperature: 1, MaxTokens: 256, ParallelToolCalls: true}
-	})
+	return New(st, reg, func() (llm.Client, error) { return client, nil }, func() Config { return cfg })
 }
 
 func TestContinueRunsToolsUntilTerminal(t *testing.T) {
@@ -187,8 +194,8 @@ func TestChoicesEnforcementNudges(t *testing.T) {
 		{ToolCalls: []llm.ToolCall{{ID: "1", Name: "say", Arguments: `{"text":"hello"}`}}},
 		{ToolCalls: []llm.ToolCall{{ID: "2", Name: "choices", Arguments: "{}"}}},
 	}}
-	a := newTestAgent(t, client)
-	sess := &store.Session{ID: "abc", Settings: store.Settings{ChoicesEnabled: true, MaxSteps: 5}}
+	a := newTestAgentCfg(t, client, Config{ChoicesEnabled: true, MaxSteps: 5, Temperature: 1, MaxTokens: 256, ToolChoice: "auto"})
+	sess := &store.Session{ID: "abc"}
 	if err := a.store.Create(sess); err != nil {
 		t.Fatal(err)
 	}
@@ -215,7 +222,7 @@ func TestChoicesDisabledEndsWithoutNudge(t *testing.T) {
 		{Content: "the end"},
 	}}
 	a := newTestAgent(t, client)
-	sess := &store.Session{ID: "abc", Settings: store.Settings{ChoicesEnabled: false, MaxSteps: 5}}
+	sess := &store.Session{ID: "abc"}
 	if err := a.store.Create(sess); err != nil {
 		t.Fatal(err)
 	}
@@ -224,5 +231,34 @@ func TestChoicesDisabledEndsWithoutNudge(t *testing.T) {
 	}
 	if client.index != 2 {
 		t.Fatalf("expected 2 completions, got %d", client.index)
+	}
+}
+
+// Every request must take its options from the global config. The session
+// stores none of them, so a Settings change applies to running stories too.
+func TestRequestsUseGlobalConfig(t *testing.T) {
+	client := &fakeClient{responses: []*llm.Response{
+		{ToolCalls: []llm.ToolCall{{ID: "1", Name: "finish", Arguments: "{}"}}},
+	}}
+	a := newTestAgentCfg(t, client, Config{
+		Model: "global/model", Temperature: 0.25, MaxTokens: 111, MaxSteps: 2,
+		ToolChoice: "auto", ReasoningEffort: "low",
+	})
+	sess := &store.Session{ID: "abc"}
+	if err := a.store.Create(sess); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Continue(context.Background(), sess, func(Event) {}); err != nil {
+		t.Fatal(err)
+	}
+	req := client.requests[0]
+	if req.Model != "global/model" {
+		t.Fatalf("model = %q, want global/model", req.Model)
+	}
+	if req.Temperature != 0.25 || req.MaxTokens != 111 {
+		t.Fatalf("temperature/maxTokens = %v/%d, want 0.25/111", req.Temperature, req.MaxTokens)
+	}
+	if req.ReasoningEffort != "low" {
+		t.Fatalf("reasoningEffort = %q, want low", req.ReasoningEffort)
 	}
 }
