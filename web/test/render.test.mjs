@@ -9,6 +9,7 @@ import { StoryModal } from '../story.js';
 import { NewSessionModal, StoriesModal, PresetModal } from '../library.js';
 import { Login } from '../login.js';
 import { TokenStatus, TokenPanel } from '../tokens.js';
+import { OptionPicker, modelOptions } from '../picker.js';
 
 function check(name, out, needles) {
   const missing = needles.filter((needle) => !out.includes(needle));
@@ -29,7 +30,12 @@ const stories = [
   { id: 'emberfall', title: 'Emberfall', description: 'dark fantasy', genre: 'fantasy', characterCount: 3, builtin: true },
   { id: 'custom1', title: 'Custom', description: 'mine', characterCount: 1 },
 ];
-const session = { id: 's1', storyTitle: 'Emberfall', characters: [], settings: {} };
+const session = {
+  id: 's1',
+  storyTitle: 'Emberfall',
+  settings: {},
+  characters: [{ id: 'c1', name: 'Ilyra', description: 'archivist', personality: 'dry', voice: 'af_heart', avatar: '' }],
+};
 
 const chat = renderToString(h(MessageList, {
   session: {
@@ -58,16 +64,24 @@ const tokenSession = {
 const tokenModels = [{ id: 'x/y', context: 20000, maxOutput: 4000 }];
 const tokenStatus = renderToString(h(TokenStatus, { session: tokenSession, models: tokenModels }));
 const tokenPanel = renderToString(h(TokenPanel, { session: tokenSession, models: tokenModels }));
+const pickerOptions = modelOptions(chatModels);
+const picker = renderToString(h(OptionPicker, {
+  value: 'deepseek/deepseek-chat',
+  options: pickerOptions,
+  onChange: () => {},
+  placeholder: 'Select a model',
+}));
 
 const total = check('MessageList', chat, ['hello there', 'well met', '✎', '↻'])
   + check('App', app, ['Genesis', 'Begin a story', 'Create a story to start…', 'agentic roleplay'])
-  + check('SettingsModal', settings, ['tool-toggles', 'toggle-row', 'chat-model-options', 'speech-model-options', '<select'])
-  + check('StoryModal', sessionSettings, ['tool-toggles', 'story-model-options', '<select'])
+  + check('SettingsModal', settings, ['tool-toggles', 'toggle-row', 'picker-trigger', '<select'])
+  + check('StoryModal', sessionSettings, ['tool-toggles', 'picker-trigger', '<select'])
   + check('NewSessionModal', newSession, ['preset-card', 'New session', 'Emberfall'])
   + check('StoriesModal', storiesModal, ['preset-list', 'preset-row', 'New preset', 'Start'])
-  + check('PresetModal', preset, ['tool-toggles', 'preset-model-options', '<select'])
+  + check('PresetModal', preset, ['tool-toggles', 'picker-trigger', '<select'])
   + check('Login', login, ['login-screen', 'login-card', 'Password', 'Unlock'])
   + check('Composer', composer, ['What do you do?', 'OOC', 'Send'])
   + check('TokenStatus', tokenStatus, ['token-status', 'token-bar', 'token-num', '5.0k/20k', '25% of 20k'])
-  + check('TokenPanel', tokenPanel, ['stat-grid', 'Context', 'Cached', '5.0k / 20k (25%)', 'Session total', '13k', '$0.0123']);
-console.log('web SSR smoke test OK (' + total + ' chars across 10 renders)');
+  + check('TokenPanel', tokenPanel, ['stat-grid', 'Context', 'Cached', '5.0k / 20k (25%)', 'Session total', '13k', '$0.0123'])
+  + check('OptionPicker', picker, ['picker-trigger', 'DeepSeek', 'deepseek/deepseek-chat']);
+console.log('web SSR smoke test OK (' + total + ' chars across 11 renders)');

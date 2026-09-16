@@ -4,15 +4,9 @@ import htm from './vendor/htm.module.js';
 import { assetURL } from './api.js';
 import { formatText, initial } from './format.js';
 import { TokenStatus, TokenPanel } from './tokens.js';
+import { OptionPicker, modelOptions, speechOptions, stringOptions } from './picker.js';
 
 const html = htm.bind(h);
-
-function modelLabel(m) {
-  const parts = [m.name || m.id];
-  if (m.tools) parts.push('tools');
-  if (m.context) parts.push(Math.round(m.context / 1000) + 'k');
-  return parts.join(' · ');
-}
 
 const REASONING_LEVELS = [
   ['off', 'off (no thinking)'],
@@ -389,12 +383,10 @@ export function CharacterEditor({ character, index, sessionId, onChange, onRemov
           <label class="field"><span>Personality</span>
             <input type="text" value=${character.personality} placeholder="Dry, patient, secretly sentimental."
                    onInput=${set('personality')} /></label>
-          <label class="field"><span>Voice (TTS)</span>
-            <input type="text" value=${character.voice} list=${'voice-' + character.key}
-                   placeholder="af_heart" onInput=${set('voice')} />
-            <datalist id=${'voice-' + character.key}>
-              ${(voiceOptions || []).map((v) => html`<option value=${v} key=${v}></option>`)}
-            </datalist></label>
+          <div class="field"><span>Voice (TTS)</span>
+            <${OptionPicker} value=${character.voice} options=${stringOptions(voiceOptions)}
+              onChange=${ (v) => onChange(index, { voice: v }) }
+              placeholder="af_heart" title="Voice" /></div>
         </div>
       </div>
     </div>`;
@@ -520,16 +512,12 @@ export function SettingsModal({ config, onClose, onSave, chatModels, onReloadMod
           <p class="hint">${cfg.hasKey ? 'A key is configured. Leave blank to keep it.' : 'No key configured yet.'}</p>
           <label class="field"><span>Base URL</span><input type="text" value=${form.baseUrl} onInput=${set('baseUrl')} /></label>
           <div class="row">
-            <label class="field grow"><span>Model</span>
-              <input type="text" list="chat-model-options" value=${form.model}
-                     onInput=${ (e) => setForm((f) => ({ ...f, model: e.currentTarget.value })) }
-                     onChange=${ (e) => applyModel(e.currentTarget.value) } /></label>
+            <div class="field grow"><span>Model</span>
+              <${OptionPicker} value=${form.model} options=${modelOptions(chatModels)} onChange=${applyModel}
+                placeholder="Select a model" title="Chat model" /></div>
             <button class="btn btn-ghost btn-sm" type="button" disabled=${busy} onClick=${reload}>${busy ? '…' : 'Reload'}</button>
           </div>
           <span class="hint">${modelHint}</span>
-          <datalist id="chat-model-options">
-            ${(chatModels || []).map((m) => html`<option value=${m.id} label=${modelLabel(m)} key=${m.id}></option>`)}
-          </datalist>
           <div class="row">
             <label class="field"><span>Temperature</span>
               <input type="number" min="0" max="2" step="0.05" value=${form.temperature} onInput=${set('temperature')} /></label>
@@ -553,24 +541,19 @@ export function SettingsModal({ config, onClose, onSave, chatModels, onReloadMod
           <hr />
           <strong>Text to speech</strong>
           <div class="grid-2">
-            <label class="field"><span>Speech model</span>
-              <input type="text" list="speech-model-options" placeholder="hexgrad/kokoro-82m"
-                     value=${form.speechModel}
-                     onInput=${set('speechModel')} />
-              <span class="hint">${speechModels.length + ' TTS models'}</span></label>
-            <label class="field"><span>Default voice</span>
-              <input type="text" list="speech-voice-options" placeholder="af_heart"
-                     value=${form.speechVoice} onInput=${set('speechVoice')} />
+            <div class="field"><span>Speech model</span>
+              <${OptionPicker} value=${form.speechModel} options=${speechOptions(speechModels)}
+                onChange=${ (v) => setForm((f) => ({ ...f, speechModel: v })) }
+                placeholder="hexgrad/kokoro-82m" title="Speech model" />
+              <span class="hint">${speechModels.length + ' TTS models'}</span></div>
+            <div class="field"><span>Default voice</span>
+              <${OptionPicker} value=${form.speechVoice} options=${stringOptions(voiceOptions)}
+                onChange=${ (v) => setForm((f) => ({ ...f, speechVoice: v })) }
+                placeholder="af_heart" title="Voice" />
               <span class="hint">${speechModels.length === 0
                 ? 'Voice catalog unavailable — type a voice your model supports.'
-                : voiceOptions.length + ' voices for this model'}</span></label>
+                : voiceOptions.length + ' voices for this model'}</span></div>
           </div>
-          <datalist id="speech-model-options">
-            ${speechModels.map((m) => html`<option value=${m.id} label=${m.name + ' · ' + (m.voices || []).length + ' voices'} key=${m.id}></option>`)}
-          </datalist>
-          <datalist id="speech-voice-options">
-            ${voiceOptions.map((v) => html`<option value=${v} key=${v}></option>`)}
-          </datalist>
           <div class="row">
             <label class="field"><span>Format</span>
               <select value=${form.speechFormat} onChange=${set('speechFormat')}>

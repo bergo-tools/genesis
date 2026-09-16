@@ -6,6 +6,7 @@
 - `app.js`：根组件。状态、NDJSON 事件处理、流的中止与恢复、设置保存等。
 - `components.js`：纯展示组件（消息、输入框、侧栏、世界面板、各类设置弹窗）。
 - `tokens.js`：顶栏的上下文占用条与面板里的 Tokens 明细。
+- `picker.js`：可搜索的模型/音色选择器（移动端弹层）。原生的 `<datalist>` 在 iOS Safari 上完全不显示、在 Android 上也很挤，所以所有模型选择都走这里。
 - `story.js`：当前会话的 Story settings 弹窗。
 - `library.js`：New session / Stories / Preset 弹窗。
 - `login.js`：全屏密码登录页。

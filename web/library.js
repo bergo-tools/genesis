@@ -3,6 +3,7 @@ import { useEffect, useState } from './vendor/hooks.module.js';
 import htm from './vendor/htm.module.js';
 import { assetURL, storyAssetURL } from './api.js';
 import { CharacterEditor, ToolToggles, ReasoningSelect } from './components.js';
+import { OptionPicker, modelOptions } from './picker.js';
 
 const html = htm.bind(h);
 
@@ -209,14 +210,10 @@ export function PresetModal({ story, config, chatModels, tools, onClose, onSave 
             <label class="field"><span>Genre</span>
               <input type="text" placeholder="dark fantasy" value=${genre}
                      onInput=${ (e) => setGenre(e.currentTarget.value) } /></label>
-            <label class="field"><span>Default model</span>
-              <input type="text" list="preset-model-options" value=${model}
-                     onChange=${ (e) => pickModel(e.currentTarget.value) }
-                     onInput=${ (e) => setModel(e.currentTarget.value) } /></label>
+            <div class="field"><span>Default model</span>
+              <${OptionPicker} value=${model} options=${modelOptions(chatModels)} onChange=${pickModel}
+                placeholder="Select a model" title="Default model" /></div>
           </div>
-          <datalist id="preset-model-options">
-            ${(chatModels || []).map((m) => html`<option value=${m.id} label=${m.name} key=${m.id}></option>`)}
-          </datalist>
           <label class="field"><span>Description</span>
             <textarea rows="2" value=${description} onInput=${ (e) => setDescription(e.currentTarget.value) }></textarea></label>
           <label class="field"><span>Opening message</span>

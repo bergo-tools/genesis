@@ -3,6 +3,7 @@ import { useEffect, useState } from './vendor/hooks.module.js';
 import htm from './vendor/htm.module.js';
 import { assetURL } from './api.js';
 import { CharacterEditor, ToolToggles, ReasoningSelect } from './components.js';
+import { OptionPicker, modelOptions } from './picker.js';
 
 const html = htm.bind(h);
 
@@ -106,14 +107,10 @@ export function StoryModal({ session, onClose, onSave, chatModels, speechModel, 
           <hr />
           <strong>Model &amp; generation</strong>
           <div class="row">
-            <label class="field grow"><span>Model</span>
-              <input type="text" list="story-model-options" value=${model}
-                     onChange=${ (e) => pickModel(e.currentTarget.value) }
-                     onInput=${ (e) => setModel(e.currentTarget.value) } /></label>
+            <div class="field grow"><span>Model</span>
+              <${OptionPicker} value=${model} options=${modelOptions(chatModels)} onChange=${pickModel}
+                placeholder="Select a model" title="Chat model" /></div>
           </div>
-          <datalist id="story-model-options">
-            ${(chatModels || []).map((m) => html`<option value=${m.id} label=${m.name + (m.tools ? ' · tools' : '')} key=${m.id}></option>`)}
-          </datalist>
           <span class="hint">${modelHint}</span>
           <${ReasoningSelect} value=${reasoningEffort} onChange=${setReasoningEffort} />
           <div class="row">
