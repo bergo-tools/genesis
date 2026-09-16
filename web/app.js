@@ -19,6 +19,7 @@ export function App() {
   const [uploading, setUploading] = useState(false);
   const [modal, setModal] = useState(null);
   const [tools, setTools] = useState([]);
+  const [chatModels, setChatModels] = useState([]);
   const [toasts, setToasts] = useState([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -311,12 +312,15 @@ export function App() {
     }
   }, [pushToast]);
 
-  const loadModels = useCallback(async () => {
+  // notify=false keeps the boot-time auto-load quiet when no key is set yet.
+  const reloadChatModels = useCallback(async (notify = true) => {
     try {
       const data = await api.models();
-      return (data.models || []).map((m) => ({ id: m.id, name: m.name }));
+      const list = data.models || [];
+      setChatModels(list);
+      return list;
     } catch (err) {
-      pushToast(err.message, 'error');
+      if (notify) pushToast(err.message, 'error');
       return [];
     }
   }, [pushToast]);
@@ -326,10 +330,9 @@ export function App() {
       const data = await api.speechModels();
       return data.models || [];
     } catch (err) {
-      pushToast(err.message, 'error');
       return [];
     }
-  }, [pushToast]);
+  }, []);
 
   const createStory = useCallback(async (data) => {
     try {
@@ -464,6 +467,7 @@ export function App() {
         list = [];
       }
       setSessions(list);
+      await reloadChatModels(false);
       const last = localStorage.getItem(LS_KEY);
       const target = last && list.some((s) => s.id === last) ? last : list[0] && list[0].id;
       if (target) await openSession(target);
@@ -537,10 +541,11 @@ export function App() {
       />
       ${modal === 'settings' && html`
         <${C.SettingsModal} config=${config} onClose=${() => setModal(null)} onSave=${saveConfig}
-                            onLoadModels=${loadModels} onLoadSpeechModels=${loadSpeechModels} />`}
+                            chatModels=${chatModels} onReloadModels=${reloadChatModels}
+                            onLoadSpeechModels=${loadSpeechModels} />`}
       ${modal === 'new' && html`
         <${C.NewStoryModal} config=${config} onClose=${() => setModal(null)} onCreate=${createStory}
-                            onLoadSpeechModels=${loadSpeechModels} />`}
+                            chatModels=${chatModels} onLoadSpeechModels=${loadSpeechModels} />`}
       ${modal === 'cast' && session && html`
         <${C.CastModal} session=${session} onClose=${() => setModal(null)} onSave=${saveCast}
                         speechModel=${config && config.speechModel} onLoadSpeechModels=${loadSpeechModels} />`}

@@ -6,6 +6,13 @@ import { formatText, initial } from './format.js';
 
 const html = htm.bind(h);
 
+function modelLabel(m) {
+  const parts = [m.name || m.id];
+  if (m.tools) parts.push('tools');
+  if (m.context) parts.push(Math.round(m.context / 1000) + 'k');
+  return parts.join(' · ');
+}
+
 const REASONING_LEVELS = [
   ['off', 'off (no thinking)'],
   ['minimal', 'minimal'],
@@ -325,7 +332,7 @@ function ReasoningSelect({ value, onChange }) {
     </label>`;
 }
 
-export function SettingsModal({ config, onClose, onSave, onLoadModels, onLoadSpeechModels }) {
+export function SettingsModal({ config, onClose, onSave, chatModels, onReloadModels, onLoadSpeechModels }) {
   const cfg = config || {};
   const [form, setForm] = useState({
     apiKey: '',
@@ -344,7 +351,6 @@ export function SettingsModal({ config, onClose, onSave, onLoadModels, onLoadSpe
     speechSpeed: cfg.speechSpeed != null ? cfg.speechSpeed : 1,
     autoSpeak: cfg.autoSpeak === true,
   });
-  const [models, setModels] = useState([]);
   const [speechModels, setSpeechModels] = useState([]);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
@@ -360,10 +366,10 @@ export function SettingsModal({ config, onClose, onSave, onLoadModels, onLoadSpe
   }, [onLoadSpeechModels]);
   const voiceOptions = ((speechModels.find((m) => m.id === form.speechModel) || {}).voices) || [];
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.currentTarget.value }));
-  const load = async () => {
+  const reload = async () => {
     setBusy(true);
     try {
-      setModels(await onLoadModels());
+      await onReloadModels();
     } finally {
       setBusy(false);
     }
@@ -401,11 +407,12 @@ export function SettingsModal({ config, onClose, onSave, onLoadModels, onLoadSpe
           <label class="field"><span>Base URL</span><input type="text" value=${form.baseUrl} onInput=${set('baseUrl')} /></label>
           <div class="row">
             <label class="field grow"><span>Model</span>
-              <input type="text" list="model-options" value=${form.model} onInput=${set('model')} /></label>
-            <button class="btn btn-ghost btn-sm" type="button" disabled=${busy} onClick=${load}>${busy ? '…' : 'Load'}</button>
+              <input type="text" list="chat-model-options" value=${form.model} onInput=${set('model')} /></label>
+            <button class="btn btn-ghost btn-sm" type="button" disabled=${busy} onClick=${reload}>${busy ? '…' : 'Reload'}</button>
           </div>
-          <datalist id="model-options">
-            ${models.map((m) => html`<option value=${m.id} label=${m.name} key=${m.id}></option>`)}
+          <span class="hint">${(chatModels || []).length + ' models · ' + (chatModels || []).filter((m) => m.tools).length + ' support tools'}</span>
+          <datalist id="chat-model-options">
+            ${(chatModels || []).map((m) => html`<option value=${m.id} label=${modelLabel(m)} key=${m.id}></option>`)}
           </datalist>
           <div class="row">
             <label class="field"><span>Temperature</span>
@@ -429,7 +436,9 @@ export function SettingsModal({ config, onClose, onSave, onLoadModels, onLoadSpe
             <label class="field"><span>Default voice</span>
               <input type="text" list="speech-voice-options" placeholder="af_heart"
                      value=${form.speechVoice} onInput=${set('speechVoice')} />
-              <span class="hint">${voiceOptions.length + ' voices for this model'}</span></label>
+              <span class="hint">${speechModels.length === 0
+                ? 'Voice catalog unavailable — type a voice your model supports.'
+                : voiceOptions.length + ' voices for this model'}</span></label>
           </div>
           <datalist id="speech-voice-options">
             ${voiceOptions.map((v) => html`<option value=${v} key=${v}></option>`)}
@@ -474,7 +483,7 @@ function newCharacter() {
   return { key: 'c' + Math.random().toString(36).slice(2), id: '', name: '', description: '', personality: '', avatar: '', voice: '', avatarFile: null, avatarPreview: '' };
 }
 
-export function NewStoryModal({ config, onClose, onCreate, onLoadSpeechModels }) {
+export function NewStoryModal({ config, onClose, onCreate, chatModels, onLoadSpeechModels }) {
   const cfg = config || {};
   const [speechModels, setSpeechModels] = useState([]);
   useEffect(() => {
@@ -559,9 +568,13 @@ export function NewStoryModal({ config, onClose, onCreate, onLoadSpeechModels })
                       value=${greeting} onInput=${ (e) => setGreeting(e.currentTarget.value) }></textarea></label>
           <div class="grid-2">
             <label class="field"><span>Model</span>
-              <input type="text" list="model-options" value=${model} onInput=${ (e) => setModel(e.currentTarget.value) } /></label>
+              <input type="text" list="new-story-model-options" value=${model}
+                     onInput=${ (e) => setModel(e.currentTarget.value) } /></label>
             <ReasoningSelect value=${reasoningEffort} onChange=${setReasoningEffort} />
           </div>
+          <datalist id="new-story-model-options">
+            ${(chatModels || []).map((m) => html`<option value=${m.id} label=${modelLabel(m)} key=${m.id}></option>`)}
+          </datalist>
           <label class="switch">
             <input type="checkbox" checked=${choicesEnabled}
                    onChange=${ (e) => setChoicesEnabled(e.currentTarget.checked) } />

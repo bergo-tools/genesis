@@ -30,6 +30,8 @@ OpenRouter 的 chat 接口由官方 SDK [`github.com/OpenRouterTeam/go-sdk`](htt
 - **重新 roll**：一键丢弃上一轮 AI 输出并重写，换一个走向。
 - **思考强度可调**：off / minimal / low / medium / high / max（关闭思考即 off）。
 - **语音（TTS）**：通过 OpenRouter 合成语音，可配置 speech 模型与音色，逐块朗读任意文本。
+- **模型列表自动加载**：Settings 与 New story 的文字模型输入都是从 OpenRouter 拉取的
+  datalist，标注上下文长度与是否支持 tools（支持工具调用的排在前面），无需手动加载。
 - **每个 story 一个目录**，删掉目录即彻底清理，便于备份与批量删除。
 - **流式 agent 循环**：NDJSON 事件流实时推送 thinking、工具调用、消息、状态、选项与用量。
 - **持久化**：story 以 JSON 原子写入；配置在 `config.json`（API key 可来自 `.env`）。
@@ -140,7 +142,7 @@ func weatherTool() *agent.Tool {
 | 方法 & 路径 | 说明 |
 | --- | --- |
 | `GET/PUT /api/config` | 读取（key 脱敏）/ 保存配置 |
-| `GET /api/models` | 代理拉取模型列表 |
+| `GET /api/models` | 代理拉取文本模型列表（含 `tools` 标记，支持工具调用的排前面） |
 | `GET /api/tools` | 列出已注册工具及 schema |
 | `GET /api/sessions` | story 列表 |
 | `POST /api/sessions` | 新建（persona、characters[]、greeting、settings） |

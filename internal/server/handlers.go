@@ -1,12 +1,14 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -108,57 +110,101 @@ func (s *Server) handlePutConfig(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.cfg.Public())
 }
 
+// chatModelInfo is a text model offered for roleplay, with a hint about
+// whether it supports tool calling (which Genesis relies on entirely).
+type chatModelInfo struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Context int    `json:"context"`
+	Tools   bool   `json:"tools"`
+}
+
 func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
 	c := s.cfg.Get()
 	if strings.TrimSpace(c.APIKey) == "" {
 		writeError(w, http.StatusBadRequest, errors.New("add an API key before listing models"))
 		return
 	}
-	base := strings.TrimRight(c.BaseURL, "/")
+	models, err := fetchChatModels(r.Context(), c.BaseURL, c.APIKey)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"models": models})
+}
+
+// fetchChatModels lists text-capable chat models and marks which ones support
+// the "tools" parameter. Tool-capable models sort first.
+func fetchChatModels(ctx context.Context, baseURL, apiKey string) ([]chatModelInfo, error) {
+	base := strings.TrimRight(baseURL, "/")
 	if base == "" {
 		base = config.Default().BaseURL
 	}
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, base+"/models", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/models?output_modalities=text", nil)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
+		return nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+c.APIKey)
+	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("Accept", "application/json")
 	client := &http.Client{Timeout: 20 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		writeError(w, http.StatusBadGateway, err)
-		return
+		return nil, err
 	}
 	defer resp.Body.Close()
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 16<<20))
 	if resp.StatusCode >= 300 {
-		writeError(w, resp.StatusCode, fmt.Errorf("provider: %s", strings.TrimSpace(string(body))))
-		return
+		return nil, fmt.Errorf("provider: %s", strings.TrimSpace(string(body)))
 	}
 	var parsed struct {
 		Data []struct {
-			ID   string `json:"id"`
-			Name string `json:"name"`
+			ID                  string   `json:"id"`
+			Name                string   `json:"name"`
+			ContextLength       int      `json:"context_length"`
+			SupportedParameters []string `json:"supported_parameters"`
+			Architecture        struct {
+				OutputModalities []string `json:"output_modalities"`
+			} `json:"architecture"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(body, &parsed); err != nil {
-		writeError(w, http.StatusBadGateway, err)
-		return
+		return nil, err
 	}
-	models := make([]map[string]string, 0, len(parsed.Data))
+	out := make([]chatModelInfo, 0, len(parsed.Data))
 	for _, m := range parsed.Data {
-		if m.ID == "" {
+		if strings.TrimSpace(m.ID) == "" {
+			continue
+		}
+		if mods := m.Architecture.OutputModalities; len(mods) > 0 && !hasString(mods, "text") {
 			continue
 		}
 		name := m.Name
 		if name == "" {
 			name = m.ID
 		}
-		models = append(models, map[string]string{"id": m.ID, "name": name})
+		out = append(out, chatModelInfo{
+			ID:      m.ID,
+			Name:    name,
+			Context: m.ContextLength,
+			Tools:   hasString(m.SupportedParameters, "tools"),
+		})
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"models": models})
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Tools != out[j].Tools {
+			return out[i].Tools
+		}
+		return out[i].ID < out[j].ID
+	})
+	return out, nil
+}
+
+func hasString(list []string, want string) bool {
+	for _, v := range list {
+		if v == want {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Server) handleTools(w http.ResponseWriter, _ *http.Request) {
