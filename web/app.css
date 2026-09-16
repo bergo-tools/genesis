@@ -276,6 +276,7 @@ hr { border: none; border-top: 1px solid var(--border); margin: 2px 0; }
 .speak-btn { border: 1px solid var(--border); background: var(--bg-elev); border-radius: 999px; padding: 2px 9px; font-size: 13px; cursor: pointer; line-height: 1.4; }
 .speak-btn:hover { border-color: var(--accent); }
 .speak-btn.active { border-color: var(--accent); background: var(--accent-soft); }
+.edit-box { width: 100%; min-height: 64px; resize: vertical; padding: 9px 11px; border-radius: 10px; border: 1px solid var(--accent); background: var(--bg); color: var(--text); font: inherit; }
 @media (hover: none) { .msg-actions { opacity: .8; } }
 
 

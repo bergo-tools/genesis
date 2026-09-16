@@ -4,7 +4,7 @@
 import renderToString from './render-to-string.module.js';
 import { h } from '../vendor/preact.module.js';
 import { App } from '../app.js';
-import { SettingsModal } from '../components.js';
+import { SettingsModal, MessageList } from '../components.js';
 import { StoryModal } from '../story.js';
 import { NewSessionModal, StoriesModal, PresetModal } from '../library.js';
 
@@ -30,6 +30,18 @@ const stories = [
 ];
 const session = { id: 's1', storyTitle: 'Emberfall', characters: [], settings: {} };
 
+const chat = renderToString(h(MessageList, {
+  session: {
+    id: 's1',
+    messages: [
+      { id: 'u1', role: 'user', kind: 'user', text: 'hello there' },
+      { id: 'a1', role: 'assistant', kind: 'speech', speaker: 'Ilyra', text: 'well met' },
+    ],
+  },
+  onSpeak: () => {},
+  onReroll: () => {},
+  onEdit: () => {},
+}));
 const app = renderToString(h(App, {}));
 const settings = renderToString(h(SettingsModal, { config: {}, tools, chatModels, disabledTools: [] }));
 const sessionSettings = renderToString(h(StoryModal, { session, tools, chatModels, disabledTools: [] }));
@@ -37,7 +49,8 @@ const newSession = renderToString(h(NewSessionModal, { stories }));
 const storiesModal = renderToString(h(StoriesModal, { stories }));
 const preset = renderToString(h(PresetModal, { story: null, config: {}, tools, chatModels }));
 
-const total = check('App', app, ['Genesis', 'Begin a story', 'What do you do?', 'agentic roleplay'])
+const total = check('MessageList', chat, ['hello there', 'well met', '✎', '↻'])
+  + check('App', app, ['Genesis', 'Begin a story', 'What do you do?', 'agentic roleplay'])
   + check('SettingsModal', settings, ['tool-toggles', 'toggle-row', 'chat-model-options', 'speech-model-options', '<select'])
   + check('StoryModal', sessionSettings, ['tool-toggles', 'story-model-options', '<select'])
   + check('NewSessionModal', newSession, ['preset-card', 'New session', 'Emberfall'])

@@ -515,7 +515,7 @@ func (s *Server) handleMessage(w http.ResponseWriter, r *http.Request) {
 		Speaker: sess.Persona.Name, Text: text, Images: images, CreatedAt: time.Now().UTC(),
 	}
 	sess.Messages = append(sess.Messages, user)
-	sess.History = append(sess.History, llm.Message{Role: llm.RoleUser, Content: text, Images: assetImages(images)})
+	sess.History = append(sess.History, llm.Message{Role: llm.RoleUser, Content: text, Images: assetImages(images), Ref: user.ID})
 	// The player answered, so the previous branch offer is spent.
 	sess.PendingChoices = nil
 	sess.PendingPrompt = ""
@@ -555,8 +555,20 @@ func (s *Server) handleOpening(w http.ResponseWriter, r *http.Request) {
 	s.streamTurn(w, r, sess, nil, "")
 }
 
+// handleRegenerate rewrites the response to one user message. messageId picks
+// the turn (default: the last one); an optional text replaces that user
+// message before the turn is re-run, which is how edits work.
 func (s *Server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	var body struct {
+		MessageID string  `json:"messageId"`
+		Text      *string `json:"text"`
+	}
+	if err := decodeJSON(r, &body); err != nil && !errors.Is(err, io.EOF) {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+
 	lock := s.store.TurnLock(id)
 	lock.Lock()
 	defer lock.Unlock()
@@ -566,12 +578,54 @@ func (s *Server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, statusFor(err), err)
 		return
 	}
-	truncateLastTurn(sess)
+	anchor := strings.TrimSpace(body.MessageID)
+	if anchor == "" {
+		anchor = lastUserMessageID(sess)
+	}
+	if anchor == "" {
+		writeError(w, http.StatusBadRequest, errors.New("there is no user message to regenerate from"))
+		return
+	}
+	if !truncateFromUser(sess, anchor) {
+		writeError(w, http.StatusNotFound, errors.New("message not found"))
+		return
+	}
+	if body.Text != nil {
+		setUserMessageText(sess, anchor, strings.TrimSpace(*body.Text))
+	}
 	if err := s.store.Save(sess); err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
 	s.streamTurn(w, r, sess, nil, "")
+}
+
+func lastUserMessageID(sess *store.Session) string {
+	if sess == nil {
+		return ""
+	}
+	for i := len(sess.Messages) - 1; i >= 0; i-- {
+		if sess.Messages[i].Kind == store.KindUser {
+			return sess.Messages[i].ID
+		}
+	}
+	return ""
+}
+
+// setUserMessageText rewrites a user message in both the transcript and the
+// display list.
+func setUserMessageText(sess *store.Session, msgID, text string) {
+	for _, m := range sess.Messages {
+		if m != nil && m.ID == msgID && m.Kind == store.KindUser {
+			m.Text = text
+		}
+	}
+	for i := range sess.History {
+		h := &sess.History[i]
+		if h.Role == llm.RoleUser && h.Ref == msgID {
+			h.Content = text
+		}
+	}
 }
 
 func (s *Server) handleAssetUpload(w http.ResponseWriter, r *http.Request) {
@@ -657,31 +711,46 @@ func assetImages(names []string) []llm.Image {
 	return out
 }
 
-func truncateLastTurn(sess *store.Session) {
-	lastUser := -1
-	for i := len(sess.History) - 1; i >= 0; i-- {
-		if sess.History[i].Role == llm.RoleUser {
-			lastUser = i
+// truncateFromUser keeps one user message and drops everything after it, in
+// both the display list and the model transcript. It reports whether the
+// message exists.
+func truncateFromUser(sess *store.Session, msgID string) bool {
+	mi := -1
+	for i, m := range sess.Messages {
+		if m != nil && m.ID == msgID && m.Kind == store.KindUser {
+			mi = i
 			break
 		}
 	}
-	if lastUser >= 0 {
-		sess.History = sess.History[:lastUser+1]
+	if mi < 0 {
+		return false
+	}
+	sess.Messages = sess.Messages[:mi+1]
+
+	hi := -1
+	for i := range sess.History {
+		if sess.History[i].Role == llm.RoleUser && sess.History[i].Ref == msgID {
+			hi = i
+			break
+		}
+	}
+	if hi < 0 {
+		// Older sessions predate Ref; only the last turn is safe to redo.
+		for i := len(sess.History) - 1; i >= 0; i-- {
+			if sess.History[i].Role == llm.RoleUser {
+				hi = i
+				break
+			}
+		}
+	}
+	if hi >= 0 {
+		sess.History = sess.History[:hi+1]
 	} else {
 		sess.History = nil
 	}
-	lastMsgUser := -1
-	for i := len(sess.Messages) - 1; i >= 0; i-- {
-		if sess.Messages[i].Kind == store.KindUser {
-			lastMsgUser = i
-			break
-		}
-	}
-	if lastMsgUser >= 0 {
-		sess.Messages = sess.Messages[:lastMsgUser+1]
-	} else {
-		sess.Messages = nil
-	}
+	sess.PendingChoices = nil
+	sess.PendingPrompt = ""
+	return true
 }
 
 func deriveTitle(text string) string {

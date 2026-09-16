@@ -204,24 +204,37 @@ export function App() {
     }
   }, [runStream, pushToast]);
 
-  const reroll = useCallback(async () => {
+  // Re-roll one turn: drop everything after its user message and regenerate.
+  const rerollFrom = useCallback(async (messageId) => {
     const current = sessionRef.current;
-    if (!current) return;
+    if (!current || !messageId) return;
     setSession((s) => {
       if (!s) return s;
-      const msgs = s.messages.slice();
-      let idx = -1;
-      for (let i = msgs.length - 1; i >= 0; i--) {
-        if (msgs[i].kind === 'user') {
-          idx = i;
-          break;
-        }
-      }
-      return { ...s, messages: idx >= 0 ? msgs.slice(0, idx + 1) : [] };
+      const idx = s.messages.findIndex((m) => m.id === messageId);
+      return idx >= 0 ? { ...s, messages: s.messages.slice(0, idx + 1) } : s;
     });
     setChoices([]);
     setActivity([]);
-    await runStream('/api/sessions/' + current.id + '/regenerate', {});
+    await runStream('/api/sessions/' + current.id + '/regenerate', { messageId });
+  }, [runStream]);
+
+  // Edit a user message and rerun from that point.
+  const editUserMessage = useCallback(async (message, text) => {
+    const current = sessionRef.current;
+    if (!current || !message) return;
+    const value = String(text || '').trim();
+    if (!value) return;
+    setSession((s) => {
+      if (!s) return s;
+      const idx = s.messages.findIndex((m) => m.id === message.id);
+      if (idx < 0) return s;
+      const next = s.messages.slice(0, idx + 1);
+      next[idx] = { ...next[idx], text: value };
+      return { ...s, messages: next };
+    });
+    setChoices([]);
+    setActivity([]);
+    await runStream('/api/sessions/' + current.id + '/regenerate', { messageId: message.id, text: value });
   }, [runStream]);
 
   const stop = useCallback(() => {
@@ -650,7 +663,6 @@ export function App() {
     setPanelOpen(false);
   };
   const messages = (session && session.messages) || [];
-  const canReroll = !streaming && messages.length > 0 && messages[messages.length - 1].kind !== 'user';
 
   return html`
     <${Fragment}>
@@ -675,7 +687,8 @@ export function App() {
         />
         <${C.SceneBar} scene=${session && session.scene} />
         <${C.MessageList} session=${session} streaming=${streaming} onNewStory=${() => setModal('new-session')}
-                              onSpeak=${speak} speakingId=${speaking} />
+                              onSpeak=${speak} speakingId=${speaking}
+                              onReroll=${rerollFrom} onEdit=${editUserMessage} busy=${streaming} />
         <${C.StatusBar} status=${status && status.status} step=${status && status.step} />
         <${C.Choices} choices=${choices} onChoose=${ (text) => send(text, []) } />
         <${C.Composer}
@@ -683,10 +696,8 @@ export function App() {
           uploading=${uploading}
           disabled=${!session}
           hasChoices=${choices.length > 0}
-          canReroll=${canReroll}
           onSend=${send}
           onStop=${stop}
-          onReroll=${reroll}
         />
       </main>
       <${C.Panel}

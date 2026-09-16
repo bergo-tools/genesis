@@ -47,7 +47,21 @@ function messageImages(message, session) {
   return message.localImages || [];
 }
 
-export function Message({ message, session, onSpeak, speaking }) {
+export function Message({ message, session, onSpeak, speaking, action, onReroll, onEdit, busy }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(message.text || '');
+  const speakable = Boolean(message.text) && message.kind !== 'state' && message.kind !== 'scene';
+  const canEdit = Boolean(action && action.editable);
+  const canReroll = Boolean(action && action.rerollFrom);
+  const hasActions = speakable || canEdit || canReroll;
+  const startEdit = () => {
+    setDraft(message.text || '');
+    setEditing(true);
+  };
+  const saveEdit = () => {
+    setEditing(false);
+    if (onEdit) onEdit(message, draft);
+  };
   const cls = ['msg', message.role, message.kind, message.pending ? 'pending' : ''].filter(Boolean).join(' ');
   const speaker = message.speaker || (message.role === 'user'
     ? ((session && session.persona && session.persona.name) || 'You')
@@ -67,23 +81,50 @@ export function Message({ message, session, onSpeak, speaking }) {
           <div class="attachments">
             ${images.map((src, i) => html`<img class="attachment" key=${i} src=${src} alt="attachment" loading="lazy" />`)}
           </div>`}
-        ${message.text ? html`
-          <div class="text" dangerouslySetInnerHTML=${{ __html: formatText(message.text) }}></div>` : null}
-        ${message.thought ? html`
-          <div class="thought-inline" dangerouslySetInnerHTML=${{ __html: formatText(message.thought) }}></div>` : null}
-        ${(message.text || message.thought) ? html`
+        ${editing ? html`
+          <textarea class="edit-box" rows="3" value=${draft}
+                    onInput=${(e) => setDraft(e.currentTarget.value)}></textarea>
           <div class="msg-actions">
-            <button class=${'speak-btn' + (speaking ? ' active' : '')} type="button"
-                    title=${speaking ? 'Stop' : 'Read aloud'}
-                    onClick=${() => onSpeak && onSpeak(message)}>${speaking ? '⏹' : '🔊'}</button>
-          </div>` : null}
+            <button class="btn btn-primary btn-sm" type="button" disabled=${busy} onClick=${saveEdit}>${busy ? '…' : 'Save & rerun'}</button>
+            <button class="btn btn-ghost btn-sm" type="button" onClick=${() => setEditing(false)}>Cancel</button>
+          </div>`
+        : html`
+          ${message.text ? html`
+            <div class="text" dangerouslySetInnerHTML=${{ __html: formatText(message.text) }}></div>` : null}
+          ${message.thought ? html`
+            <div class="thought-inline" dangerouslySetInnerHTML=${{ __html: formatText(message.thought) }}></div>` : null}
+          ${hasActions ? html`
+            <div class="msg-actions">
+              ${speakable && html`
+                <button class=${'speak-btn' + (speaking ? ' active' : '')} type="button"
+                        title=${speaking ? 'Stop' : 'Read aloud'}
+                        onClick=${() => onSpeak && onSpeak(message)}>${speaking ? '⏹' : '🔊'}</button>`}
+              ${canEdit && html`
+                <button class="speak-btn" type="button" title="Edit and rerun from here" onClick=${startEdit}>✎</button>`}
+              ${canReroll && html`
+                <button class="speak-btn" type="button" title="Re-roll this turn"
+                        onClick=${() => onReroll && onReroll(action.rerollFrom)}>↻</button>`}
+            </div>` : null}`}
       </div>
     </div>`;
 }
 
-export function MessageList({ session, streaming, onNewStory, onSpeak, speakingId }) {
+export function MessageList({ session, streaming, onNewStory, onSpeak, speakingId, onReroll, onEdit, busy }) {
   const ref = useRef(null);
   const messages = (session && session.messages) || [];
+  // Per-turn actions: a user message is editable, and the last assistant
+  // message of its turn gets the re-roll button.
+  const actions = {};
+  for (let i = 0; i < messages.length; i++) {
+    if (messages[i].kind !== 'user') continue;
+    let j = i + 1;
+    while (j < messages.length && messages[j].kind !== 'user') j++;
+    if (j - 1 > i) {
+      const lastID = messages[j - 1].id;
+      actions[lastID] = Object.assign({}, actions[lastID], { rerollFrom: messages[i].id });
+    }
+    actions[messages[i].id] = Object.assign({}, actions[messages[i].id], { editable: true });
+  }
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -95,16 +136,16 @@ export function MessageList({ session, streaming, onNewStory, onSpeak, speakingI
       <section class="messages" ref=${ref}>
         <div class="empty">
           <h2>Begin a story</h2>
-          <p>Genesis is an agentic game master. Every beat is a tool call: the cast speaks with
-             message, thinks with think, remembers with update_state, and hands you the next
-             branches with choices.</p>
+          <p>Genesis is an agentic game master. Every beat is a tool call: the cast speaks and thinks
+             with message, tracks facts with update_state, sets the scene with scene, and hands you
+             the next branches with choices.</p>
           <p><button class="btn btn-primary" type="button" onClick=${onNewStory}>Create your first story</button></p>
         </div>
       </section>`;
   }
   return html`
     <section class="messages" ref=${ref}>
-      ${messages.map((m) => html`<${Message} key=${m.id} message=${m} session=${session} onSpeak=${onSpeak} speaking=${speakingId === m.id} />`)}
+      ${messages.map((m) => html`<${Message} key=${m.id} message=${m} session=${session} onSpeak=${onSpeak} speaking=${speakingId === m.id} action=${actions[m.id]} onReroll=${onReroll} onEdit=${onEdit} busy=${busy} />`)}
     </section>`;
 }
 
@@ -142,7 +183,7 @@ export function Choices({ choices, onChoose }) {
     </section>`;
 }
 
-export function Composer({ streaming, disabled, uploading, hasChoices, canReroll, onSend, onStop, onReroll }) {
+export function Composer({ streaming, disabled, uploading, hasChoices, onSend, onStop }) {
   const ref = useRef(null);
   const fileRef = useRef(null);
   const [value, setValue] = useState('');
@@ -196,8 +237,6 @@ export function Composer({ streaming, disabled, uploading, hasChoices, canReroll
           onInput=${ (e) => setValue(e.currentTarget.value) }
           onKeyDown=${ (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); } } }
         ></textarea>
-        ${!streaming && canReroll && html`
-          <button class="btn btn-ghost" type="button" title="Re-roll this response" onClick=${onReroll}>↻</button>`}
         ${streaming
           ? html`<button class="btn btn-danger" type="button" onClick=${onStop}>Stop</button>`
           : html`<button class="btn btn-primary" type="button" disabled=${Boolean(disabled) || uploading} onClick=${submit}>${uploading ? '…' : 'Send'}</button>`}

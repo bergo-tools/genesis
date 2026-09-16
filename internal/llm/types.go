@@ -35,7 +35,10 @@ type Message struct {
 	ToolCalls  []ToolCall `json:"toolCalls,omitempty"`
 	ToolCallID string     `json:"toolCallId,omitempty"`
 	Name       string     `json:"name,omitempty"`
-	Reasoning  string     `json:"reasoning,omitempty"`
+	// Ref links a transcript entry back to the display message it came from,
+	// so a turn can be truncated and regenerated precisely.
+	Ref       string `json:"ref,omitempty"`
+	Reasoning string `json:"reasoning,omitempty"`
 }
 
 // ToolDef describes a callable tool using JSON Schema.
