@@ -36,6 +36,11 @@ func (s *Server) handlePutConfig(w http.ResponseWriter, r *http.Request) {
 		ParallelToolCalls *bool    `json:"parallelToolCalls"`
 		ReasoningEffort   *string  `json:"reasoningEffort"`
 		ChoicesEnabled    *bool    `json:"choicesEnabled"`
+		SpeechModel       *string  `json:"speechModel"`
+		SpeechVoice       *string  `json:"speechVoice"`
+		SpeechFormat      *string  `json:"speechFormat"`
+		SpeechSpeed       *float64 `json:"speechSpeed"`
+		AutoSpeak         *bool    `json:"autoSpeak"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, err)
@@ -79,6 +84,21 @@ func (s *Server) handlePutConfig(w http.ResponseWriter, r *http.Request) {
 		}
 		if body.ChoicesEnabled != nil {
 			c.ChoicesEnabled = *body.ChoicesEnabled
+		}
+		if body.SpeechModel != nil {
+			c.SpeechModel = strings.TrimSpace(*body.SpeechModel)
+		}
+		if body.SpeechVoice != nil {
+			c.SpeechVoice = *body.SpeechVoice
+		}
+		if body.SpeechFormat != nil && strings.TrimSpace(*body.SpeechFormat) != "" {
+			c.SpeechFormat = strings.TrimSpace(*body.SpeechFormat)
+		}
+		if body.SpeechSpeed != nil && *body.SpeechSpeed > 0 {
+			c.SpeechSpeed = *body.SpeechSpeed
+		}
+		if body.AutoSpeak != nil {
+			c.AutoSpeak = *body.AutoSpeak
 		}
 	})
 	if err != nil {

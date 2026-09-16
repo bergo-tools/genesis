@@ -168,8 +168,12 @@ func weatherTool() *agent.Tool {
 
 通过 OpenRouter 的 `/audio/speech` 合成语音，用来朗读**指定的文本块**：
 
-- **可配置 speech 模型**：默认 `openai/gpt-4o-mini-tts`，在 Settings 中修改；输出格式支持
-  mp3 / wav / opus / aac / flac / pcm，并支持播放速度。
+- **可配置 speech 模型**：默认 `hexgrad/kokoro-82m`（音色 `af_heart`），在 Settings 中修改；
+  输出格式支持 mp3 / wav / opus / aac / flac / pcm，并支持播放速度。
+  可用 `GET https://openrouter.ai/api/v1/models?output_modalities=speech` 发现全部语音模型。
+  已实测可返回音频的模型：`hexgrad/kokoro-82m`、`deepgram/flux-tts:free`（免费，需显式音色，
+  如 `flux-alexis-en`）。**各模型音色命名不同**（Kokoro 用 `af_heart`，Deepgram 用 `flux-*-en`），
+  用错音色会返回 provider 的具体报错。
 - **逐块朗读**：每条消息旁有 🔊 按钮，点击朗读该块，再点停止。
 - **音色**：角色卡可单独设置 `voice`（如 `alloy` / `shimmer`）；朗读时优先使用角色音色，
   否则回退到全局默认音色，旁白使用全局音色。
