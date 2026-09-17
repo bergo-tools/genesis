@@ -66,6 +66,10 @@ const storiesModal = renderToString(h(StoriesModal, { stories }));
 const preset = renderToString(h(PresetModal, { story: null }));
 const login = renderToString(h(Login, { onSuccess: () => {} }));
 const composer = renderToString(h(Composer, { streaming: false, disabled: false, uploading: false, hasChoices: false, onSend: () => {}, onStop: () => {} }));
+const composerMenu = renderToString(h(Composer, {
+  streaming: false, disabled: false, uploading: false, hasChoices: false,
+  onSend: () => {}, onStop: () => {}, menuInitiallyOpen: true,
+}));
 const tokenSession = {
   model: 'x/y',
   tokens: { lastPromptTokens: 5000, lastCachedTokens: 2000, totalPromptTokens: 12000, totalCompletionTokens: 800, requests: 3, totalCost: 0.0123 },
@@ -108,7 +112,9 @@ const total = check('MessageList', chat, ['hello there', 'well met', '✎', '↻
   + check('PresetModal', preset, ['New preset', 'Opening message', 'Story instructions', '+ Add character'])
   + deny('PresetModal', preset, ['picker-trigger', 'tool-toggles', '<select', 'Temperature', 'Max output tokens', 'Default model'])
   + check('Login', login, ['login-screen', 'login-card', 'Password', 'Unlock'])
-  + check('Composer', composer, ['What do you do?', 'OOC', 'Send'])
+  + check('Composer', composer, ['What do you do?', 'composer-btn', 'aria-label="Send"', 'aria-label="More options"'])
+  + deny('Composer', composer, ['OOC', 'composer-menu'])
+  + check('ComposerMenu', composerMenu, ['composer-menu', 'pill-btn', 'OOC', '🖼 Image'])
   + check('TokenStatus', tokenStatus, ['token-status', 'token-bar', 'token-num', '5.0k/20k', '25% of 20k'])
   + check('TokenPanel', tokenPanel, ['stat-grid', 'Context', 'Cached', '5.0k / 20k (25%)', 'Session total', '13k', '$0.0123'])
   + check('OptionPicker', picker, ['picker-trigger', 'DeepSeek', 'deepseek/deepseek-chat'])
@@ -119,4 +125,4 @@ if (sceneBarHidden !== '') {
   console.error('SceneBar must render nothing when hidden');
   process.exit(1);
 }
-console.log('web SSR smoke test OK (' + total + ' chars across 14 renders)');
+console.log('web SSR smoke test OK (' + total + ' chars across 16 renders)');

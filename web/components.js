@@ -233,12 +233,15 @@ export function Choices({ choices, onChoose }) {
     </section>`;
 }
 
-export function Composer({ streaming, disabled, uploading, hasChoices, onSend, onStop }) {
+// menuInitiallyOpen is a test seam: the smoke test renders the secondary menu
+// open without running effects or clicking.
+export function Composer({ streaming, disabled, uploading, hasChoices, onSend, onStop, menuInitiallyOpen }) {
   const ref = useRef(null);
   const fileRef = useRef(null);
   const [value, setValue] = useState('');
   const [ooc, setOoc] = useState('');
   const [showOoc, setShowOoc] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(Boolean(menuInitiallyOpen));
   const [files, setFiles] = useState([]);
 
   useEffect(() => {
@@ -259,6 +262,7 @@ export function Composer({ streaming, disabled, uploading, hasChoices, onSend, o
     setOoc('');
     if (!directive) setShowOoc(false);
     setFiles([]);
+    setMenuOpen(false);
     onSend(text, payload, directive);
   };
   const addFiles = (e) => {
@@ -269,6 +273,11 @@ export function Composer({ streaming, disabled, uploading, hasChoices, onSend, o
     e.currentTarget.value = '';
   };
   const removeFile = (index) => setFiles((cur) => cur.filter((_, i) => i !== index));
+  const pickImage = () => {
+    setMenuOpen(false);
+    if (fileRef.current) fileRef.current.click();
+  };
+  const toggleOoc = () => setShowOoc((v) => !v);
 
   return html`
     <footer class="composer">
@@ -284,10 +293,17 @@ export function Composer({ streaming, disabled, uploading, hasChoices, onSend, o
         <textarea class="ooc-box" rows="2" value=${ooc} autocomplete="off" disabled=${locked}
                   placeholder="Out-of-character instruction to the model — it directs the story, it is not part of it."
                   onInput=${ (e) => setOoc(e.currentTarget.value) }></textarea>`}
+      ${menuOpen && html`
+        <div class="composer-menu">
+          <button class="pill-btn" type="button" disabled=${locked || busy} onClick=${pickImage}>🖼 Image</button>
+          <button class=${'pill-btn' + (showOoc ? ' active' : '')} type="button" disabled=${locked}
+                  onClick=${toggleOoc}>OOC</button>
+        </div>`}
       <div class="composer-row">
-        <button class="btn btn-ghost attach-btn" type="button" title="Attach an image"
-                disabled=${locked || busy} onClick=${() => fileRef.current && fileRef.current.click()}>🖼</button>
         <input ref=${fileRef} type="file" accept="image/*" multiple hidden disabled=${locked || busy} onChange=${addFiles} />
+        <button class=${'composer-btn' + (menuOpen ? ' open' : '')} type="button" aria-label="More options"
+                aria-expanded=${menuOpen} disabled=${locked}
+                onClick=${() => setMenuOpen((v) => !v)}>${menuOpen ? '×' : '+'}</button>
         <textarea
           ref=${ref}
           rows="1"
@@ -298,11 +314,10 @@ export function Composer({ streaming, disabled, uploading, hasChoices, onSend, o
           onInput=${ (e) => setValue(e.currentTarget.value) }
           onKeyDown=${ (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); } } }
         ></textarea>
-        <button class=${'btn btn-ghost btn-ooc' + (showOoc ? ' active' : '')} type="button"
-                title="Add an out-of-character instruction" disabled=${locked} onClick=${() => setShowOoc((v) => !v)}>OOC</button>
         ${streaming
-          ? html`<button class="btn btn-danger" type="button" onClick=${onStop}>Cancel</button>`
-          : html`<button class="btn btn-primary" type="button" disabled=${Boolean(disabled) || uploading} onClick=${submit}>${uploading ? '…' : 'Send'}</button>`}
+          ? html`<button class="composer-btn stop" type="button" aria-label="Cancel" onClick=${onStop}>■</button>`
+          : html`<button class="composer-btn primary" type="button" aria-label="Send"
+                    disabled=${Boolean(disabled) || uploading} onClick=${submit}>${uploading ? '…' : '↑'}</button>`}
       </div>
     </footer>`;
 }
