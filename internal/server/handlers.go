@@ -479,6 +479,8 @@ func (s *Server) handleMessage(w http.ResponseWriter, r *http.Request) {
 		Text   string   `json:"text"`
 		OOC    string   `json:"ooc"`
 		Images []string `json:"images"`
+		// Choice marks a turn that came from tapping an offered branch.
+		Choice bool `json:"choice"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, err)
@@ -503,7 +505,7 @@ func (s *Server) handleMessage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user := &store.Message{
-		ID: store.NewID(), Role: "user", Kind: store.KindUser,
+		ID: store.NewID(), Role: "user", Kind: store.KindUser, Choice: body.Choice,
 		Speaker: sess.Persona.Name, Text: text, OOC: ooc, Images: images, CreatedAt: time.Now().UTC(),
 		// Remember the world before this turn so a re-roll can restore it.
 		Snapshot: &store.TurnSnapshot{State: cloneState(sess.State)},
@@ -511,7 +513,7 @@ func (s *Server) handleMessage(w http.ResponseWriter, r *http.Request) {
 	sess.Messages = append(sess.Messages, user)
 	sess.History = append(sess.History, llm.Message{
 		Role:    llm.RoleUser,
-		Content: userTurnContent(text, ooc),
+		Content: turnContent(text, ooc, body.Choice),
 		Images:  assetImages(images),
 		Ref:     user.ID,
 	})
@@ -615,6 +617,19 @@ func userTurnContent(text, ooc string) string {
 	return content + "\n\n" + directive
 }
 
+// choiceMarker tells the model a turn came from the offered branches rather
+// than the keyboard. The system prompt explains what to do with it.
+const choiceMarker = "[choice]"
+
+// turnContent builds the model-facing text for one player turn.
+func turnContent(text, ooc string, choice bool) string {
+	content := userTurnContent(text, ooc)
+	if !choice || content == "" {
+		return content
+	}
+	return content + "\n\n" + choiceMarker
+}
+
 func lastUserMessageID(sess *store.Session) string {
 	if sess == nil {
 		return ""
@@ -633,6 +648,7 @@ func lastUserMessageID(sess *store.Session) string {
 func setUserMessageText(sess *store.Session, msgID, text string) {
 	text = strings.TrimSpace(text)
 	ooc := ""
+	choice := false
 	ordinal := -1
 	seen := 0
 	for _, m := range sess.Messages {
@@ -642,11 +658,12 @@ func setUserMessageText(sess *store.Session, msgID, text string) {
 		if m.ID == msgID {
 			m.Text = text
 			ooc = m.OOC
+			choice = m.Choice
 			ordinal = seen
 		}
 		seen++
 	}
-	content := userTurnContent(text, ooc)
+	content := turnContent(text, ooc, choice)
 	for i := range sess.History {
 		h := &sess.History[i]
 		if h.Role == llm.RoleUser && h.Ref == msgID {

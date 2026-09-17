@@ -260,6 +260,13 @@ hr { border: none; border-top: 1px solid var(--border); margin: 2px 0; }
 
 .choices-label { font-size: 11.5px; color: var(--muted); }
 
+.choice-tag {
+  font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+  padding: 1px 6px; border-radius: 999px; border: 1px solid var(--border);
+  background: var(--bg-soft); color: var(--muted);
+}
+.msg.user.choice .text { border-style: dashed; }
+
 .field-tag {
   display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);

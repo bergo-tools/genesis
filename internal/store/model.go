@@ -103,8 +103,12 @@ type Message struct {
 	Thought string `json:"thought,omitempty"`
 	// OOC is an out-of-character instruction the player sent with this
 	// message. It is shown separately and passed to the model as [OOC] text.
-	OOC       string    `json:"ooc,omitempty"`
-	Images    []string  `json:"images,omitempty"`
+	OOC    string   `json:"ooc,omitempty"`
+	Images []string `json:"images,omitempty"`
+	// Choice marks a player turn that came from tapping one of the offered
+	// branches instead of typing. The model is told, so the narrator can expand
+	// on what the choice actually does.
+	Choice    bool      `json:"choice,omitempty"`
 	CreatedAt time.Time `json:"createdAt"`
 	// Snapshot is the world as it was before this user turn ran. A re-roll or
 	// edit restores it so state cannot drift out of sync with the messages.

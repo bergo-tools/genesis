@@ -67,8 +67,9 @@ export function Message({ message, session, onSpeak, speaking, action, onReroll,
     setEditing(false);
     if (onEdit) onEdit(message, draft);
   };
-  const cls = ['msg', message.role, message.kind, message.pending ? 'pending' : '', grouped ? 'grouped' : '']
-    .filter(Boolean).join(' ');
+  const cls = Array.from(new Set(['msg', message.role, message.kind,
+    message.choice ? 'choice' : '', message.pending ? 'pending' : '', grouped ? 'grouped' : '']
+    .filter(Boolean))).join(' ');
   const speaker = message.speaker || (message.role === 'user'
     ? ((session && session.persona && session.persona.name) || 'You')
     : '');
@@ -80,7 +81,10 @@ export function Message({ message, session, onSpeak, speaking, action, onReroll,
       ${avatar !== null && html`<div class="avatar">${avatar}</div>`}
       <div class="body">
         ${showSpeaker && html`
-          <div class="speaker"><span>${speaker}</span></div>`}
+          <div class="speaker">
+            <span>${speaker}</span>
+            ${message.choice && html`<span class="choice-tag" title="Picked from the offered branches">choice</span>`}
+          </div>`}
         ${images.length > 0 && html`
           <div class="attachments">
             ${images.map((src, i) => html`<img class="attachment" key=${i} src=${src} alt="attachment" loading="lazy" />`)}

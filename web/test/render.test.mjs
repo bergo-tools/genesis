@@ -54,6 +54,7 @@ const chat = renderToString(h(MessageList, {
       { id: 'n1', role: 'assistant', kind: 'narration', speaker: 'Narrator', text: 'The fog thickens.' },
       { id: 'a1', role: 'assistant', kind: 'speech', speaker: 'Ilyra', text: 'well met' },
       { id: 'a2', role: 'assistant', kind: 'action', speaker: 'Ilyra', text: 'She steps closer.' },
+      { id: 'u2', role: 'user', kind: 'user', text: 'Draw the blade', choice: true },
     ],
   },
   onSpeak: () => {},
@@ -102,12 +103,12 @@ if (narratorBlock.includes('class="avatar"')) {
   process.exit(1);
 }
 const avatarCount = (chat.match(/class="avatar"/g) || []).length;
-if (avatarCount !== 3) {
-  console.error('expected 3 avatars (user + two Ilyra beats), got ' + avatarCount);
+if (avatarCount !== 4) {
+  console.error('expected 4 avatars (two user turns + two Ilyra beats), got ' + avatarCount);
   process.exit(1);
 }
 
-const total = check('MessageList', chat, ['hello there', 'well met', '✎', '↻', 'The fog thickens.', 'She steps closer.', 'msg assistant action grouped'])
+const total = check('MessageList', chat, ['hello there', 'well met', '✎', '↻', 'The fog thickens.', 'She steps closer.', 'msg assistant action grouped', 'choice-tag', 'msg user choice', 'Draw the blade'])
   + check('App', app, ['Genesis', 'Begin a story', 'Create a story to start…', 'agentic roleplay', 'Generate a preset from a description'])
   + check('SettingsModal', settings, ['tool-toggles', 'toggle-row', 'picker-trigger', '<select'])
   + check('StoryModal', sessionSettings, ['Story settings', 'Story instructions', '+ Add character', 'picker-trigger', 'field-tag', 'marks what the model actually reads'])

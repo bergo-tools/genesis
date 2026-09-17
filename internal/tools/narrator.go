@@ -20,7 +20,8 @@ func narratorTool() *agent.Tool {
 		Description: "The narrator's voice. Describe the world and move the plot: what a place " +
 			"looks, sounds and smells like, light and weather, time passing, what happens next, " +
 			"and consequences the player cannot see yet. Use it to open a scene before the cast " +
-			"acts and to bridge between their beats. Never put dialogue here.",
+			"acts, to spell out what the player's last choice actually did, and to bridge between " +
+			"their beats. Never put dialogue here.",
 		Parameters: object(map[string]any{
 			"text":      stringProp("One short paragraph of scene or plot description."),
 			"last_call": lastCallProp(),

@@ -265,7 +265,7 @@ export function App({ initialAuth = null } = {}) {
     }
   }, [handleEvent, pushToast, refreshSessions]);
 
-  const send = useCallback(async (text, files, ooc) => {
+  const send = useCallback(async (text, files, ooc, choice) => {
     const current = sessionRef.current;
     const value = String(text || '').trim();
     const directive = String(ooc || '').trim();
@@ -278,6 +278,7 @@ export function App({ initialAuth = null } = {}) {
       speaker: (current.persona && current.persona.name) || '',
       text: value,
       ooc: directive,
+      choice: Boolean(choice),
       localImages: picked.map((file) => URL.createObjectURL(file)),
       pending: true,
       createdAt: new Date().toISOString(),
@@ -293,7 +294,7 @@ export function App({ initialAuth = null } = {}) {
           names.push(up.name);
         }
       }
-      await runStream('/api/sessions/' + current.id + '/messages', { text: value, images: names, ooc: directive });
+      await runStream('/api/sessions/' + current.id + '/messages', { text: value, images: names, ooc: directive, choice: Boolean(choice) });
     } catch (err) {
       pushToast(err.message, 'error');
     } finally {
@@ -765,7 +766,7 @@ export function App({ initialAuth = null } = {}) {
                               onSpeak=${speak} speakingId=${speaking}
                               onReroll=${rerollFrom} onEdit=${editUserMessage} busy=${streaming} />
         <${C.StatusBar} status=${status && status.status} step=${status && status.step} />
-        <${C.Choices} choices=${session ? choices : []} onChoose=${ (text) => send(text, []) } />
+        <${C.Choices} choices=${session ? choices : []} onChoose=${ (text) => send(text, [], '', true) } />
         <${C.Composer}
           streaming=${streaming}
           uploading=${uploading}
