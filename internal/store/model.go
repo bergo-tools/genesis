@@ -82,6 +82,20 @@ type Character struct {
 	CreatedAt   time.Time `json:"createdAt"`
 }
 
+// Block types inside one writing block. A thought is the character's private
+// voice, rendered dimmed; it may sit between lines of prose.
+const (
+	BlockText    = "text"
+	BlockThought = "thought"
+)
+
+// Block is one piece of a character's beat, in the order the model wrote it.
+type Block struct {
+	Type string `json:"type"`           // text | thought
+	Kind string `json:"kind,omitempty"` // text blocks only: speech | action | narration
+	Text string `json:"text"`
+}
+
 // Message kinds rendered by the UI.
 const (
 	KindUser      = "user"
@@ -105,6 +119,10 @@ type Message struct {
 	// message. It is shown separately and passed to the model as [OOC] text.
 	OOC    string   `json:"ooc,omitempty"`
 	Images []string `json:"images,omitempty"`
+	// Blocks is the ordered prose/thought list a writing_block call produced.
+	// Text holds the joined prose so TTS, titles and older clients still work;
+	// Thought is only set by sessions recorded before blocks existed.
+	Blocks []Block `json:"blocks,omitempty"`
 	// Choice marks a player turn that came from tapping one of the offered
 	// branches instead of typing. The model is told, so the narrator can expand
 	// on what the choice actually does.

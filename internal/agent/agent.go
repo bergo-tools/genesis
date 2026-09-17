@@ -28,8 +28,8 @@ const (
 	choicesReminder = "[system] You ended the turn without calling the choices tool. Choices are " +
 		"enabled, so you MUST finish with the choices tool before stopping. Call it now with the " +
 		"player's next two to four options."
-	messageReminder = "[system] You have not shown the player anything yet. Use the message tool to " +
-		"speak or narrate, then finish the turn with the choices tool."
+	messageReminder = "[system] You have not shown the player anything yet. Use the writing_block " +
+		"tool to speak or narrate, then finish the turn with the choices tool."
 )
 
 // Config carries default generation settings, overridable per story.

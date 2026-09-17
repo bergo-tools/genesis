@@ -17,7 +17,7 @@ func TestTruncateFromUser(t *testing.T) {
 		},
 		History: []llm.Message{
 			{Role: llm.RoleUser, Content: "a", Ref: "u1"},
-			{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{ID: "t1", Name: "message"}}},
+			{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{ID: "t1", Name: "writing_block"}}},
 			{Role: llm.RoleTool, ToolCallID: "t1", Content: "{}"},
 			{Role: llm.RoleUser, Content: "b", Ref: "u2"},
 			{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{ID: "t2", Name: "choices"}}},

@@ -55,6 +55,14 @@ const chat = renderToString(h(MessageList, {
       { id: 'a1', role: 'assistant', kind: 'speech', speaker: 'Ilyra', text: 'well met' },
       { id: 'a2', role: 'assistant', kind: 'action', speaker: 'Ilyra', text: 'She steps closer.' },
       { id: 'u2', role: 'user', kind: 'user', text: 'Draw the blade', choice: true },
+      {
+        id: 'a3', role: 'assistant', kind: 'speech', speaker: 'Ilyra', text: '她向前一步。站住。',
+        blocks: [
+          { type: 'text', kind: 'action', text: '她向前一步。' },
+          { type: 'thought', text: '他太年轻了。' },
+          { type: 'text', text: '站住。' },
+        ],
+      },
     ],
   },
   onSpeak: () => {},
@@ -103,12 +111,19 @@ if (narratorBlock.includes('class="avatar"')) {
   process.exit(1);
 }
 const avatarCount = (chat.match(/class="avatar"/g) || []).length;
-if (avatarCount !== 4) {
-  console.error('expected 4 avatars (two user turns + two Ilyra beats), got ' + avatarCount);
+if (avatarCount !== 5) {
+  console.error('expected 5 avatars (two user turns + three Ilyra beats), got ' + avatarCount);
   process.exit(1);
 }
 
-const total = check('MessageList', chat, ['hello there', 'well met', '✎', '↻', 'The fog thickens.', 'She steps closer.', 'msg assistant action grouped', 'choice-tag', 'msg user from-choice', 'Draw the blade'])
+// A writing_block turn must keep the model's order: prose, thought, prose.
+const blockOrder = ['她向前一步。', '他太年轻了。', '站住。'].map((s) => chat.indexOf(s));
+if (!(blockOrder[0] >= 0 && blockOrder[0] < blockOrder[1] && blockOrder[1] < blockOrder[2])) {
+  console.error('writing_block blocks rendered out of order: ' + blockOrder.join(', '));
+  process.exit(1);
+}
+
+const total = check('MessageList', chat, ['hello there', 'well met', '✎', '↻', 'The fog thickens.', 'She steps closer.', 'msg assistant action grouped', 'choice-tag', 'msg user from-choice', 'Draw the blade', 'class="block action"', 'class="thought-inline"', 'class="msg assistant"'])
   + check('App', app, ['Genesis', 'Begin a story', 'Create a story to start…', 'agentic roleplay', 'Generate a preset from a description'])
   + check('SettingsModal', settings, ['tool-toggles', 'toggle-row', 'picker-trigger', '<select'])
   + check('StoryModal', sessionSettings, ['Story settings', 'Story instructions', '+ Add character', 'picker-trigger', 'field-tag', 'marks what the model actually reads'])

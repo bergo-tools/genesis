@@ -45,6 +45,19 @@ function avatarFor(message, session) {
   }
 }
 
+// renderBlock draws one prose or thought block of a writing_block turn.
+// Thinking inline is the point: a thought may sit between two lines of prose.
+function renderBlock(block, index) {
+  if (!block || !block.text) return null;
+  if (block.type === 'thought') {
+    return html`<div class="thought-inline" key=${index}
+      dangerouslySetInnerHTML=${{ __html: formatText(block.text) }}></div>`;
+  }
+  const kind = block.kind && block.kind !== 'speech' ? ' ' + block.kind : '';
+  return html`<div class=${'block' + kind} key=${index}
+    dangerouslySetInnerHTML=${{ __html: formatText(block.text) }}></div>`;
+}
+
 function messageImages(message, session) {
   if (message.images && message.images.length && session) {
     return message.images.map((name) => assetURL(session.id, name)).filter(Boolean);
@@ -67,7 +80,8 @@ export function Message({ message, session, onSpeak, speaking, action, onReroll,
     setEditing(false);
     if (onEdit) onEdit(message, draft);
   };
-  const cls = Array.from(new Set(['msg', message.role, message.kind,
+  const blocks = message.blocks || [];
+  const cls = Array.from(new Set(['msg', message.role, blocks.length ? '' : message.kind,
     message.choice ? 'from-choice' : '', message.pending ? 'pending' : '', grouped ? 'grouped' : '']
     .filter(Boolean))).join(' ');
   const speaker = message.speaker || (message.role === 'user'
@@ -100,10 +114,13 @@ export function Message({ message, session, onSpeak, speaking, action, onReroll,
             <button class="btn btn-ghost btn-sm" type="button" onClick=${() => setEditing(false)}>Cancel</button>
           </div>`
         : html`
-          ${message.text ? html`
-            <div class="text" dangerouslySetInnerHTML=${{ __html: formatText(message.text) }}></div>` : null}
-          ${message.thought ? html`
-            <div class="thought-inline" dangerouslySetInnerHTML=${{ __html: formatText(message.thought) }}></div>` : null}
+          ${blocks.length
+            ? html`<div class="text">${blocks.map(renderBlock)}</div>`
+            : html`
+              ${message.text ? html`
+                <div class="text" dangerouslySetInnerHTML=${{ __html: formatText(message.text) }}></div>` : null}
+              ${message.thought ? html`
+                <div class="thought-inline" dangerouslySetInnerHTML=${{ __html: formatText(message.thought) }}></div>` : null}`}
           ${hasActions ? html`
             <div class="msg-actions">
               ${speakable && html`
@@ -157,7 +174,7 @@ export function MessageList({ session, streaming, onNewStory, onSpeak, speakingI
         <div class="empty">
           <h2>Begin a story</h2>
           <p>Genesis is an agentic game master. Every beat is a tool call: characters speak and think
-             with message, the world is painted with narrator, and the next branches arrive through choices.</p>
+             with writing_block, the world is painted with narrator, and the next branches arrive through choices.</p>
           <p><button class="btn btn-primary" type="button" onClick=${onNewStory}>Create your first story</button></p>
         </div>
       </section>`;
