@@ -2,7 +2,7 @@ import { h } from './vendor/preact.module.js';
 import { useEffect, useState } from './vendor/hooks.module.js';
 import htm from './vendor/htm.module.js';
 import { assetURL } from './api.js';
-import { CharacterEditor } from './components.js';
+import { CharacterEditor, ModelTag } from './components.js';
 
 const html = htm.bind(h);
 
@@ -67,6 +67,7 @@ export function StoryModal({ session, onClose, onSave, speechModel, onLoadSpeech
         <header class="modal-head"><h2>Story settings</h2>
           <button class="icon-btn" type="button" onClick=${onClose}>×</button></header>
         <div class="modal-body">
+          <p class="hint"><${ModelTag} /> marks what the model actually reads. Everything else is only shown to you.</p>
           <div class="story-avatar-row">
             <label class="avatar-picker" title="Story avatar">
               ${src ? html`<img src=${src} alt="" />` : '+'}
@@ -77,7 +78,7 @@ export function StoryModal({ session, onClose, onSave, speechModel, onLoadSpeech
           </div>
 
           <hr />
-          <label class="field"><span>Story instructions</span>
+          <label class="field"><span>Story instructions <${ModelTag} /></span>
             <textarea rows="3" placeholder="Extra instructions for this story only."
                       value=${systemPrompt} onInput=${ (e) => setSystemPrompt(e.currentTarget.value) }></textarea></label>
           <p class="hint">Model, temperature and tool switches are global — change them in Settings.</p>
@@ -85,13 +86,14 @@ export function StoryModal({ session, onClose, onSave, speechModel, onLoadSpeech
           <hr />
           <div>
             <div class="row" style="justify-content:space-between;align-items:center">
-              <strong>Cast</strong>
+              <strong>Cast <${ModelTag} /></strong>
               <button class="btn btn-ghost btn-sm" type="button"
                       onClick=${ () => setCharacters((cur) => cur.concat([{
                         key: 'c' + Math.random().toString(36).slice(2), id: '', name: '', description: '',
                         avatar: '', voice: '', avatarFile: null, avatarPreview: '',
                       }])) }>+ Add character</button>
             </div>
+            <p class="hint">Each character's name and description reach the model; avatars and voices do not.</p>
             ${characters.map((c, i) => html`
               <div key=${c.key} style="margin-top:10px">
                 <${CharacterEditor} character=${c} index=${i} sessionId=${s.id} voiceOptions=${voiceOptions}

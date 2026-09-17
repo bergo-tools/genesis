@@ -260,6 +260,14 @@ hr { border: none; border-top: 1px solid var(--border); margin: 2px 0; }
 
 .choices-label { font-size: 11.5px; color: var(--muted); }
 
+.field-tag {
+  display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--accent-soft) 60%, transparent);
+  color: var(--accent); font-size: 10px; font-weight: 700; letter-spacing: .04em;
+  text-transform: uppercase; vertical-align: middle;
+}
+
 .preset-gen {
   display: flex; flex-direction: column; gap: 8px; padding: 10px 12px;
   border: 1px solid var(--border); border-radius: 12px; background: var(--bg-soft);

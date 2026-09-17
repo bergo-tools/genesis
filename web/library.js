@@ -2,7 +2,7 @@ import { h } from './vendor/preact.module.js';
 import { useEffect, useState } from './vendor/hooks.module.js';
 import htm from './vendor/htm.module.js';
 import { assetURL, storyAssetURL } from './api.js';
-import { CharacterEditor } from './components.js';
+import { CharacterEditor, ModelTag } from './components.js';
 
 const html = htm.bind(h);
 
@@ -218,6 +218,7 @@ export function PresetModal({ story, onClose, onSave, onGenerate }) {
         <header class="modal-head"><h2>${s.id ? 'Edit preset' : 'New preset'}</h2>
           <button class="icon-btn" type="button" onClick=${onClose}>×</button></header>
         <div class="modal-body">
+          <p class="hint"><${ModelTag} /> marks what the model actually reads. Everything else is only shown to you.</p>
           ${onGenerate && html`
             <section class="preset-gen">
               <label class="field"><span>✨ Generate from a description</span>
@@ -246,26 +247,27 @@ export function PresetModal({ story, onClose, onSave, onGenerate }) {
                    onInput=${ (e) => setGenre(e.currentTarget.value) } /></label>
           <label class="field"><span>Description</span>
             <textarea rows="2" value=${description} onInput=${ (e) => setDescription(e.currentTarget.value) }></textarea></label>
-          <label class="field"><span>Opening message</span>
+          <label class="field"><span>Opening message <${ModelTag} /></span>
             <textarea rows="3" placeholder="Shown when a session starts; leave blank to let the agent open."
                       value=${opening} onInput=${ (e) => setOpening(e.currentTarget.value) }></textarea></label>
-          <label class="field"><span>Suggested player description</span>
+          <label class="field"><span>Suggested player description <${ModelTag} /></span>
             <input type="text" value=${personaDesc} onInput=${ (e) => setPersonaDesc(e.currentTarget.value) } /></label>
 
-          <label class="field"><span>Story instructions</span>
+          <label class="field"><span>Story instructions <${ModelTag} /></span>
             <textarea rows="3" placeholder="Extra instructions for this story only."
                       value=${systemPrompt} onInput=${ (e) => setSystemPrompt(e.currentTarget.value) }></textarea></label>
 
           <hr />
           <div>
             <div class="row" style="justify-content:space-between;align-items:center">
-              <strong>Cast</strong>
+              <strong>Cast <${ModelTag} /></strong>
               <button class="btn btn-ghost btn-sm" type="button"
                       onClick=${ () => setCharacters((cur) => cur.concat([{
                         key: 'c' + Math.random().toString(36).slice(2), id: '', name: '', description: '',
                         avatar: '', voice: '', avatarFile: null, avatarPreview: '',
                       }])) }>+ Add character</button>
             </div>
+            <p class="hint">Each character's name and description reach the model; avatars and voices do not.</p>
             ${characters.map((c, i) => html`
               <div key=${c.key} style="margin-top:10px">
                 <${CharacterEditor} character=${c} index=${i} sessionId=${''}

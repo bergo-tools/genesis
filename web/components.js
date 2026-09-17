@@ -8,6 +8,13 @@ import { OptionPicker, modelOptions, speechOptions, stringOptions } from './pick
 
 const html = htm.bind(h);
 
+// ModelTag marks an editor field whose content is actually sent to the model.
+// Everything else a preset stores (title, genre, description, avatars, voices)
+// is only ever shown to the player.
+export function ModelTag() {
+  return html`<span class="field-tag" title="Sent to the model as part of the prompt">model</span>`;
+}
+
 const REASONING_LEVELS = [
   ['off', 'off (no thinking)'],
   ['minimal', 'minimal'],
