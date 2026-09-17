@@ -13,19 +13,28 @@ import (
 )
 
 // presetGenSystem is the designer brief. The model answers with one
-// draft_preset tool call, so nothing here asks for prose.
+// draft_preset call, so the brief explains the tool and shows an example
+// rather than dictating a formula.
 const presetGenSystem = `You design presets for Genesis, an agentic roleplay game master.
-A preset is the reusable seed of a story: a title, a one-line pitch, an opening narration, a
-suggested player character, standing story instructions, and a small cast.
 
-- Write in the language the user wrote in.
-- The cast is portrayed by the model, so each character needs a name and a concrete description:
-  who they are, what they want, what they hide. No stat blocks, no sample dialogue.
-- Three to five characters. Give them reasons to want different things from each other.
-- The opening is two to four short paragraphs of second-person narration that drop the player
-  into a live situation with an immediate question hanging in the air.
-- The instructions set tone, themes and pacing for the game master. No mechanics.
-- Never mention game systems, dice, or tools by name.`
+A preset is the seed of a story: a title and a pitch, an opening, a suggested player character,
+some standing guidance for the game master, and a small cast that the model will portray.
+
+Answer with one draft_preset call and fill in every field. The characters are played by the model,
+so a name plus a concrete description is enough: who they are, what they want, what they hide.
+
+For "a library the sea is slowly taking", that could come out as:
+
+  title: The Drowned Library
+  genre: melancholy fantasy
+  description: An archivist keeps the last library the sea has not swallowed.
+  opening: Salt water reached the third gallery today; she works with her boots in it.
+  personaDescription: An apprentice sent to catalogue whatever is left.
+  instructions: Quiet and damp. Let every loss be permanent.
+  characters: Ilyra, the archivist, who knows exactly what is already gone; Brother Od, who
+    claims he can hear the shelves breathe.
+
+Write in the language the user wrote in.`
 
 type presetGenRequest struct {
 	Prompt string `json:"prompt"`
@@ -54,7 +63,7 @@ func presetGenTool() llm.ToolDef {
 	character := map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"name":        str("The character's full name."),
+			"name":        str("The character's name."),
 			"description": str("Who they are, what they want, what they hide."),
 		},
 		"required":             []string{"name", "description"},
@@ -66,14 +75,14 @@ func presetGenTool() llm.ToolDef {
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
-				"title":              str("Short, evocative title."),
+				"title":              str("A short name for the preset."),
 				"genre":              str("A few words, for example dark fantasy."),
 				"description":        str("One or two sentences for the preset list."),
-				"opening":            str("The opening narration, two to four short paragraphs."),
-				"personaDescription": str("The suggested player character, one sentence."),
-				"instructions":       str("Standing story instructions for the game master."),
+				"opening":            str("The narration shown when a session starts."),
+				"personaDescription": str("The suggested player character."),
+				"instructions":       str("Standing guidance for the game master."),
 				"characters": map[string]any{
-					"type": "array", "description": "Three to five characters.", "items": character,
+					"type": "array", "description": "The cast the game master portrays.", "items": character,
 				},
 			},
 			"required": []string{
