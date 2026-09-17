@@ -27,6 +27,9 @@ function avatarFor(message, session) {
   const found = chars.find((c) => String(c.name || '').toLowerCase() === speaker);
   if (found && found.avatar && session) return html`<img src=${assetURL(session.id, found.avatar)} alt="" />`;
   if (found && found.name) return initial(found.name);
+  // The narrator is the world's voice, not a cast member: no avatar, so its
+  // lines do not read like one more character speaking.
+  if (speaker === 'narrator') return null;
   switch (message.kind) {
     case 'narration': return '✦';
     case 'prompt': return '❯';
@@ -42,7 +45,7 @@ function messageImages(message, session) {
   return message.localImages || [];
 }
 
-export function Message({ message, session, onSpeak, speaking, action, onReroll, onEdit, busy }) {
+export function Message({ message, session, onSpeak, speaking, action, onReroll, onEdit, busy, grouped }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(message.text || '');
   const speakable = Boolean(message.text);
@@ -57,15 +60,17 @@ export function Message({ message, session, onSpeak, speaking, action, onReroll,
     setEditing(false);
     if (onEdit) onEdit(message, draft);
   };
-  const cls = ['msg', message.role, message.kind, message.pending ? 'pending' : ''].filter(Boolean).join(' ');
+  const cls = ['msg', message.role, message.kind, message.pending ? 'pending' : '', grouped ? 'grouped' : '']
+    .filter(Boolean).join(' ');
   const speaker = message.speaker || (message.role === 'user'
     ? ((session && session.persona && session.persona.name) || 'You')
     : '');
-  const showSpeaker = speaker && message.kind !== 'narration';
+  const showSpeaker = speaker && message.kind !== 'narration' && !grouped;
+  const avatar = avatarFor(message, session);
   const images = messageImages(message, session);
   return html`
     <div class=${cls} data-id=${message.id}>
-      <div class="avatar">${avatarFor(message, session)}</div>
+      ${avatar !== null && html`<div class="avatar">${avatar}</div>`}
       <div class="body">
         ${(showSpeaker || message.mood) && html`
           <div class="speaker">
@@ -123,6 +128,15 @@ export function MessageList({ session, streaming, onNewStory, onSpeak, speakingI
     }
     actions[messages[i].id] = Object.assign({}, actions[messages[i].id], { editable: true });
   }
+  // Consecutive beats from the same speaker are one visual block: only the
+  // first shows an avatar and the speaker's name.
+  const grouped = {};
+  let previousKey = null;
+  for (const m of messages) {
+    const key = m.role === 'user' ? 'user:' + m.id : 'assistant:' + String(m.speaker || m.kind || '').toLowerCase();
+    grouped[m.id] = previousKey === key;
+    previousKey = key;
+  }
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -142,7 +156,7 @@ export function MessageList({ session, streaming, onNewStory, onSpeak, speakingI
   }
   return html`
     <section class="messages" ref=${ref}>
-      ${messages.map((m) => html`<${Message} key=${m.id} message=${m} session=${session} onSpeak=${onSpeak} speaking=${speakingId === m.id} action=${actions[m.id]} onReroll=${onReroll} onEdit=${onEdit} busy=${busy} />`)}
+      ${messages.map((m) => html`<${Message} key=${m.id} message=${m} session=${session} onSpeak=${onSpeak} speaking=${speakingId === m.id} action=${actions[m.id]} onReroll=${onReroll} onEdit=${onEdit} busy=${busy} grouped=${grouped[m.id]} />`)}
     </section>`;
 }
 

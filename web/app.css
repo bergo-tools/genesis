@@ -79,6 +79,10 @@ code { font-family: var(--mono); background: var(--bg-soft); padding: 1px 5px; b
   flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center;
   background: var(--bg-soft); border: 1px solid var(--border); font-size: 13px; opacity: .85;
 }
+/* Consecutive beats from one speaker read as one block: one avatar, one name,
+   and a tighter gap, so a multi-line beat does not look like several turns. */
+.msg.grouped { margin-top: -8px; }
+.msg.grouped .avatar { visibility: hidden; }
 .msg .body { min-width: 0; }
 .msg .speaker { font-size: 11.5px; color: var(--muted); margin-bottom: 1px; display: flex; gap: 8px; align-items: baseline; }
 .msg .speaker .mood { font-style: italic; }
