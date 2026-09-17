@@ -113,13 +113,13 @@ code { font-family: var(--mono); background: var(--bg-soft); padding: 1px 5px; b
   -webkit-overflow-scrolling: touch; scrollbar-width: none; border-radius: 12px;
 }
 .choice-pager::-webkit-scrollbar { display: none; }
-.choice {
+.choices .choice {
   flex: 0 0 100%; scroll-snap-align: start; border: 1px solid var(--border);
   background: var(--bg-elev); border-radius: 12px; padding: 11px 14px; cursor: pointer;
   font-size: 13px; text-align: left; display: flex; flex-direction: column; gap: 4px;
 }
-.choice:hover { border-color: var(--accent); background: var(--accent-soft); }
-.choice-text { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.choices .choice:hover { border-color: var(--accent); background: var(--accent-soft); }
+.choices .choice-text { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
 .choices-nav { display: flex; align-items: center; justify-content: center; gap: 12px; }
 .choice-arrow {
   width: 42px; height: 30px; border-radius: 8px; border: 1px solid var(--border);
@@ -265,7 +265,7 @@ hr { border: none; border-top: 1px solid var(--border); margin: 2px 0; }
   padding: 1px 6px; border-radius: 999px; border: 1px solid var(--border);
   background: var(--bg-soft); color: var(--muted);
 }
-.msg.user.choice .text { border-style: dashed; }
+.msg.user.from-choice .text { border-style: dashed; }
 
 .field-tag {
   display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 999px;

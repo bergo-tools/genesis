@@ -68,7 +68,7 @@ export function Message({ message, session, onSpeak, speaking, action, onReroll,
     if (onEdit) onEdit(message, draft);
   };
   const cls = Array.from(new Set(['msg', message.role, message.kind,
-    message.choice ? 'choice' : '', message.pending ? 'pending' : '', grouped ? 'grouped' : '']
+    message.choice ? 'from-choice' : '', message.pending ? 'pending' : '', grouped ? 'grouped' : '']
     .filter(Boolean))).join(' ');
   const speaker = message.speaker || (message.role === 'user'
     ? ((session && session.persona && session.persona.name) || 'You')
