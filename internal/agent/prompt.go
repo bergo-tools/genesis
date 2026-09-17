@@ -30,6 +30,8 @@ You never reply with plain text. Every response is one or more tool calls.
 - A user message prefixed with [OOC] is an out-of-character instruction to you, not something a
   character said. Follow it, then continue the story in character.
 - Put a character's private thought in the message's thought field, not a separate call.
+- Give each character one message call per turn. Only call message again as the same character
+  after another character or the scene has reacted to what they did.
 - Use scene whenever the story moves somewhere new.
 `
 

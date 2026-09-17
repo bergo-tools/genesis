@@ -20,9 +20,8 @@ func choicesTool() *agent.Tool {
 			"control back to the player, who can pick one or type something of their own.",
 		Parameters: object(map[string]any{
 			"narration": stringProp("Optional scene description or question shown to the player before the choices."),
-			"choices": arrayProp("Two to four next steps for the player.", object(map[string]any{
-				"text":        stringProp("Short imperative label."),
-				"description": stringProp("Optional one-line detail."),
+			"choices": arrayProp("Two to four next steps for the player. Keep each one a short label.", object(map[string]any{
+				"text": stringProp("Short imperative label, a handful of words."),
 			}, "text")),
 			"last_call": lastCallProp(),
 		}, "choices"),
@@ -40,7 +39,6 @@ func choicesTool() *agent.Tool {
 					continue
 				}
 				c.Text = strings.TrimSpace(c.Text)
-				c.Description = strings.TrimSpace(c.Description)
 				cleaned = append(cleaned, c)
 			}
 			if len(cleaned) == 0 {

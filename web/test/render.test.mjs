@@ -82,7 +82,7 @@ const picker = renderToString(h(OptionPicker, {
 }));
 const choices = renderToString(h(Choices, {
   choices: [
-    { text: 'Draw the blade', description: 'loud and final' },
+    { text: 'Draw the blade' },
     { text: 'Slip away into the fog' },
   ],
   onChoose: () => {},

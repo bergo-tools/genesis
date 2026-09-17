@@ -218,7 +218,6 @@ export function Choices({ choices, onChoose }) {
         ${list.map((choice, i) => html`
           <button key=${i} type="button" class="choice" onClick=${() => onChoose(choice.text)}>
             <span class="choice-text">${choice.text}</span>
-            ${choice.description && html`<small>${choice.description}</small>`}
           </button>`)}
       </div>
       ${list.length > 1 && html`

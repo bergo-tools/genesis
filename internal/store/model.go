@@ -131,10 +131,10 @@ type TurnSnapshot struct {
 	State map[string]any `json:"state,omitempty"`
 }
 
-// Choice is one branch offered to the player.
+// Choice is one branch offered to the player. It is a short label only; the
+// model explains the branches in the narration, not in the option text.
 type Choice struct {
-	Text        string `json:"text"`
-	Description string `json:"description,omitempty"`
+	Text string `json:"text"`
 }
 
 // Public returns a copy of the session safe to send to the browser.

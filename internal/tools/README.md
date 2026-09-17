@@ -6,8 +6,8 @@
   以及 `speaker`、`kind`、`mood`、`last_call`。
 - `scene.go`：location / time / weather / background / notes，只更新传入的字段；
   同时广播 `scene` 事件，并在聊天里留一条场景条。
-- `choices.go`：terminal 工具。可选 narration + 2–4 个选项，持久化到会话，刷新后仍在；
-  玩家也可以直接在输入框写自己的行动。
+- `choices.go`：terminal 工具。可选 narration + 2–4 个短选项（只取 `choices[].text`，不需要描述），
+  持久化到会话，刷新后仍在；玩家也可以直接在输入框写自己的行动。
 - `schema.go`：`object` / `stringProp` / `enumProp` / `arrayProp` / `lastCallProp` 等
   JSON Schema 小工具，以及宽松的 `decode`。
 
