@@ -20,7 +20,6 @@ const (
 	EventUsage       = "usage"
 	EventTurnEnd     = "turn_end"
 	EventError       = "error"
-	EventNotice      = "notice"
 	EventTitle       = "title"
 	EventUserMessage = "user_message"
 )

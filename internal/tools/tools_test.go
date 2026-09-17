@@ -73,9 +73,13 @@ func TestWritingBlockKeepsOrderAndThoughts(t *testing.T) {
 func TestWritingBlockRequiresSpeaker(t *testing.T) {
 	sess := &store.Session{Characters: []*store.Character{{ID: "c1", Name: "Ilyra"}}}
 	tc := &agent.TurnContext{Session: sess, Emit: func(agent.Event) {}}
-	if _, err := writingBlockTool().Handler(context.Background(), tc,
-		json.RawMessage(`{"blocks":[{"type":"text","text":"站住。"}]}`)); err == nil {
+	_, err := writingBlockTool().Handler(context.Background(), tc,
+		json.RawMessage(`{"blocks":[{"type":"text","text":"站住。"}]}`))
+	if err == nil {
 		t.Fatal("expected an error when the speaker is missing")
+	}
+	if !strings.Contains(err.Error(), "speaker") || !strings.Contains(err.Error(), "again") {
+		t.Fatalf("the hint must tell the model what to fix: %v", err)
 	}
 	if len(sess.Messages) != 0 {
 		t.Fatalf("no message may be attributed without a speaker: %+v", sess.Messages)

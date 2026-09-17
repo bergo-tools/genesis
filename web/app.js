@@ -203,9 +203,6 @@ export function App({ initialAuth = null } = {}) {
         // correct after a reload without another request.
         if (event.tokens) setSession((s) => (s ? { ...s, tokens: event.tokens } : s));
         break;
-      case 'notice':
-        pushToast(event.text);
-        break;
       case 'error':
         pushToast(event.error, 'error');
         // The turn may have been rolled back server-side; resync once the

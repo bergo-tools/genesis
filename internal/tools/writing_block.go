@@ -40,7 +40,7 @@ func writingBlockTool() *agent.Tool {
 			}
 			name := strings.TrimSpace(a.Speaker)
 			if name == "" {
-				return nil, errors.New("speaker is required: name the character this beat belongs to")
+				return nil, errors.New("speaker is required: call writing_block again with speaker set to a name from the cast")
 			}
 			blocks := cleanBlocks(a.Blocks)
 			if len(blocks) == 0 {

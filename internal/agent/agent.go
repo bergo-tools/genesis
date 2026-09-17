@@ -153,13 +153,10 @@ func (a *Agent) Continue(ctx context.Context, sess *store.Session, emit func(Eve
 			turnPlayerFacing = turnPlayerFacing || tc.PlayerFacing
 
 			if choicesRequired && !turnChoices {
-				if reminders < maxReminders {
-					reminders++
-					appendReminder(sess, choicesReminder)
-					continue
-				}
-				emit(Event{Type: EventNotice, Step: step, Text: "The model stopped before offering choices; ending the turn."})
-				break
+				// Nudge the model instead of reporting its dead end to the
+				// player. The step budget ends the turn; a toast never does.
+				appendReminder(sess, choicesReminder)
+				continue
 			}
 			if !turnPlayerFacing {
 				if reminders < maxReminders {
@@ -205,13 +202,9 @@ func (a *Agent) Continue(ctx context.Context, sess *store.Session, emit func(Eve
 			break
 		}
 		if choicesRequired {
-			if reminders < maxReminders {
-				reminders++
-				appendReminder(sess, choicesReminder)
-				continue
-			}
-			emit(Event{Type: EventNotice, Step: step, Text: "The model did not call choices; ending the turn."})
-			break
+			// Same as above: keep prompting until the step budget runs out.
+			appendReminder(sess, choicesReminder)
+			continue
 		}
 		if lastCall {
 			if turnPlayerFacing {

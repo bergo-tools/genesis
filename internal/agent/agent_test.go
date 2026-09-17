@@ -189,6 +189,46 @@ func TestRegistryDefsOrderAndMeta(t *testing.T) {
 	}
 }
 
+// A model that forgets the choices tool must keep being nudged until the step
+// budget runs out. The player is never shown a dead-end notice.
+func TestMissingChoicesNudgesInsteadOfNoticing(t *testing.T) {
+	client := &fakeClient{responses: []*llm.Response{
+		{ToolCalls: []llm.ToolCall{{ID: "1", Name: "say", Arguments: `{"text":"one"}`}}},
+		{ToolCalls: []llm.ToolCall{{ID: "2", Name: "say", Arguments: `{"text":"two"}`}}},
+		{ToolCalls: []llm.ToolCall{{ID: "3", Name: "say", Arguments: `{"text":"three"}`}}},
+	}}
+	a := newTestAgentCfg(t, client, Config{
+		ChoicesEnabled: true, MaxSteps: 3, ToolChoice: "auto", Temperature: 1, MaxTokens: 256,
+	})
+	sess := &store.Session{ID: "abc"}
+	if err := a.store.Create(sess); err != nil {
+		t.Fatal(err)
+	}
+	notices := 0
+	if err := a.Continue(context.Background(), sess, func(e Event) {
+		if e.Type == "notice" {
+			notices++
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if notices != 0 {
+		t.Fatalf("the player was shown %d dead-end notice(s)", notices)
+	}
+	if client.index != 3 {
+		t.Fatalf("the step budget should be spent nudging, got %d completions", client.index)
+	}
+	nudges := 0
+	for _, m := range sess.History {
+		if m.Role == llm.RoleUser && strings.Contains(m.Content, "choices tool") {
+			nudges++
+		}
+	}
+	if nudges == 0 {
+		t.Fatal("the model was never nudged about the missing choices")
+	}
+}
+
 func TestChoicesEnforcementNudges(t *testing.T) {
 	client := &fakeClient{responses: []*llm.Response{
 		{ToolCalls: []llm.ToolCall{{ID: "1", Name: "say", Arguments: `{"text":"hello"}`}}},
