@@ -4,7 +4,7 @@ import htm from './vendor/htm.module.js';
 import { api, uploadAsset, setUnauthorizedHandler } from './api.js';
 import * as C from './components.js';
 import { StoryModal } from './story.js';
-import { NewSessionModal, StoriesModal, PresetModal, PresetGenModal } from './library.js';
+import { NewSessionModal, StoriesModal, PresetModal } from './library.js';
 import { Login } from './login.js';
 
 const html = htm.bind(h);
@@ -472,14 +472,18 @@ export function App({ initialAuth = null } = {}) {
     }
   }, [pushToast]);
 
-  // generatePreset drafts a preset from a description and hands it to the normal
-  // editor, so nothing is saved before the user has seen it.
+  // generatePreset drafts a preset and hands the fields back to the preset
+  // editor's own form, so nothing is saved before the user has seen it.
   const generatePreset = useCallback(async (prompt) => {
     const data = await api.generateStory({ prompt });
-    if (data && data.story) {
-      setEditingStory(data.story);
-      setModal('preset');
-    }
+    return (data && data.story) || null;
+  }, []);
+
+  // openNewPreset is where PresetGen lives: a blank editor whose first field is
+  // the description box.
+  const openNewPreset = useCallback(() => {
+    setEditingStory(null);
+    setModal('preset');
   }, []);
 
   const startSession = useCallback(async (data) => {
@@ -741,6 +745,7 @@ export function App({ initialAuth = null } = {}) {
         auth=${auth}
         onOpen=${openSession}
         onNew=${() => setModal('new-session')}
+        onGenerate=${openNewPreset}
         onStories=${() => setModal('stories')}
         onSettings=${openSettings}
         onTools=${openTools}
@@ -785,16 +790,15 @@ export function App({ initialAuth = null } = {}) {
                             onLoadSpeechModels=${loadSpeechModels} tools=${allTools} />`}
       ${modal === 'new-session' && html`
         <${NewSessionModal} stories=${stories} onClose=${() => setModal(null)} onCreate=${startSession}
-                          onGenerate=${() => setModal('preset-gen')} />`}
+                          onGenerate=${openNewPreset} />`}
       ${modal === 'stories' && html`
         <${StoriesModal} stories=${stories} onClose=${() => setModal(null)}
                          onStart=${async (id) => { await loadStories(); await startSession({ storyId: id }); }}
-                         onEdit=${openPreset} onNew=${() => openPreset(null)}
-                         onGenerate=${() => setModal('preset-gen')} onDelete=${deletePreset} />`}
-      ${modal === 'preset-gen' && html`
-        <${PresetGenModal} onClose=${() => setModal(null)} onGenerate=${generatePreset} />`}
+                         onEdit=${openPreset} onNew=${openNewPreset}
+                         onGenerate=${openNewPreset} onDelete=${deletePreset} />`}
       ${modal === 'preset' && html`
-        <${PresetModal} story=${editingStory} onClose=${() => setModal(null)} onSave=${savePreset} />`}
+        <${PresetModal} story=${editingStory} onClose=${() => setModal(null)} onSave=${savePreset}
+                         onGenerate=${generatePreset} />`}
       ${modal === 'story' && session && html`
         <${StoryModal} session=${session} onClose=${() => setModal(null)} onSave=${saveStory}
                        speechModel=${config && config.speechModel}

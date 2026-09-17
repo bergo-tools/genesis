@@ -6,7 +6,7 @@ import { h } from '../vendor/preact.module.js';
 import { App } from '../app.js';
 import { SettingsModal, MessageList, Composer, Choices } from '../components.js';
 import { StoryModal } from '../story.js';
-import { NewSessionModal, StoriesModal, PresetModal, PresetGenModal } from '../library.js';
+import { NewSessionModal, StoriesModal, PresetModal } from '../library.js';
 import { Login } from '../login.js';
 import { TokenStatus, TokenPanel } from '../tokens.js';
 import { OptionPicker, modelOptions } from '../picker.js';
@@ -65,8 +65,7 @@ const settings = renderToString(h(SettingsModal, { config: {}, tools, chatModels
 const sessionSettings = renderToString(h(StoryModal, { session }));
 const newSession = renderToString(h(NewSessionModal, { stories }));
 const storiesModal = renderToString(h(StoriesModal, { stories, onGenerate: () => {} }));
-const presetGen = renderToString(h(PresetGenModal, { onClose: () => {}, onGenerate: () => {} }));
-const preset = renderToString(h(PresetModal, { story: null }));
+const preset = renderToString(h(PresetModal, { story: null, onGenerate: () => {} }));
 const login = renderToString(h(Login, { onSuccess: () => {} }));
 const composer = renderToString(h(Composer, { streaming: false, disabled: false, uploading: false, hasChoices: false, onSend: () => {}, onStop: () => {} }));
 const composerMenu = renderToString(h(Composer, {
@@ -109,14 +108,13 @@ if (avatarCount !== 3) {
 }
 
 const total = check('MessageList', chat, ['hello there', 'well met', '✎', '↻', 'The fog thickens.', 'She steps closer.', 'msg assistant action grouped'])
-  + check('App', app, ['Genesis', 'Begin a story', 'Create a story to start…', 'agentic roleplay'])
+  + check('App', app, ['Genesis', 'Begin a story', 'Create a story to start…', 'agentic roleplay', 'Generate a preset from a description'])
   + check('SettingsModal', settings, ['tool-toggles', 'toggle-row', 'picker-trigger', '<select'])
   + check('StoryModal', sessionSettings, ['Story settings', 'Story instructions', '+ Add character', 'picker-trigger'])
   + deny('StoryModal', sessionSettings, ['tool-toggles', '<select', 'Temperature', 'Max output tokens'])
   + check('NewSessionModal', newSession, ['preset-card', 'New session', 'Emberfall', 'width:40px;height:40px', '<img', 'custom1/assets/cover.png'])
   + check('StoriesModal', storiesModal, ['preset-list', 'preset-row', 'New preset', 'Start', '✨ Generate'])
-  + check('PresetGenModal', presetGen, ['Generate a preset', 'Describe the story', 'Generate', '<textarea'])
-  + check('PresetModal', preset, ['New preset', 'Opening message', 'Story instructions', '+ Add character'])
+  + check('PresetModal', preset, ['New preset', 'Opening message', 'Story instructions', '+ Add character', 'preset-gen', 'Generate from a description', 'Nothing is saved until you press Save'])
   + deny('PresetModal', preset, ['picker-trigger', 'tool-toggles', '<select', 'Temperature', 'Max output tokens', 'Default model'])
   + check('Login', login, ['login-screen', 'login-card', 'Password', 'Unlock'])
   + check('Composer', composer, ['What do you do?', 'composer-btn', 'aria-label="Send"', 'aria-label="More options"'])
@@ -126,4 +124,4 @@ const total = check('MessageList', chat, ['hello there', 'well met', '✎', '↻
   + check('TokenPanel', tokenPanel, ['stat-grid', 'Context', 'Cached', '5.0k / 20k (25%)', 'Session total', '13k', '$0.0123'])
   + check('OptionPicker', picker, ['picker-trigger', 'DeepSeek', 'deepseek/deepseek-chat'])
   + check('Choices', choices, ['choice-pager', 'choices-count', '1 / 2', 'choice-text', 'Draw the blade', 'choice-arrow', 'choice-dots']);
-console.log('web SSR smoke test OK (' + total + ' chars across 15 renders)');
+console.log('web SSR smoke test OK (' + total + ' chars across 14 renders)');

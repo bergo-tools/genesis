@@ -46,9 +46,7 @@ export function NewSessionModal({ stories, onClose, onCreate, onGenerate }) {
           <button class="icon-btn" type="button" onClick=${onClose}>×</button></header>
         <div class="modal-body">
           ${!list.length
-            ? html`<p class="muted">No presets yet. Create one under Stories first.</p>
-                ${onGenerate && html`<p><button class="btn btn-ghost btn-sm" type="button"
-                  onClick=${onGenerate}>✨ Generate a preset</button></p>`}`
+            ? html`<p class="muted">No presets yet. Create or generate one first.</p>`
             : html`
               <div>
                 <strong>Pick a story</strong>
@@ -80,50 +78,10 @@ export function NewSessionModal({ stories, onClose, onCreate, onGenerate }) {
           </div>
         </div>
         <footer class="modal-foot">
+          ${onGenerate && html`<button class="btn btn-ghost btn-sm" type="button" style="margin-right:auto"
+            onClick=${onGenerate}>✨ Generate a preset</button>`}
           <button class="btn btn-ghost" type="button" onClick=${onClose}>Cancel</button>
           <button class="btn btn-primary" type="button" disabled=${busy || !storyId} onClick=${create}>${busy ? 'Starting…' : 'Start'}</button>
-        </footer>
-      </div>
-    </div>`;
-}
-
-// PresetGenModal asks for a description and has the model draft a preset. The
-// draft lands in the normal preset editor, so nothing is saved unseen.
-export function PresetGenModal({ onClose, onGenerate }) {
-  const [prompt, setPrompt] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const submit = async () => {
-    const text = prompt.trim();
-    if (!text || busy) return;
-    setBusy(true);
-    setError('');
-    try {
-      await onGenerate(text);
-    } catch (err) {
-      setError((err && err.message) || 'Generation failed.');
-      setBusy(false);
-    }
-  };
-  return html`
-    <div class="modal" onClick=${ (e) => { if (e.target === e.currentTarget && !busy) onClose(); } }>
-      <div class="modal-card">
-        <header class="modal-head"><h2>Generate a preset</h2>
-          <button class="icon-btn" type="button" disabled=${busy} onClick=${onClose}>×</button></header>
-        <div class="modal-body">
-          <p class="hint">Describe the story you want. The model drafts a title, an opening, a cast and
-             the story instructions; you review and edit them before saving.</p>
-          <label class="field"><span>Description</span>
-            <textarea rows="5" value=${prompt}
-                      placeholder="A drowned library where the last archivist remembers the surface."
-                      onInput=${ (e) => setPrompt(e.currentTarget.value) }></textarea></label>
-          ${error && html`<p class="login-error">${error}</p>`}
-        </div>
-        <footer class="modal-foot">
-          <button class="btn btn-ghost" type="button" disabled=${busy} onClick=${onClose}>Cancel</button>
-          <button class="btn btn-primary" type="button" disabled=${busy || !prompt.trim()} onClick=${submit}>
-            ${busy ? 'Drafting…' : 'Generate'}
-          </button>
         </footer>
       </div>
     </div>`;
@@ -172,7 +130,7 @@ export function StoriesModal({ stories, onClose, onStart, onEdit, onNew, onGener
 
 // A preset is content only. Model and generation options come from the global
 // config (snapshotted into a session when it starts), never from a preset.
-export function PresetModal({ story, onClose, onSave }) {
+export function PresetModal({ story, onClose, onSave, onGenerate }) {
   const s = story || {};
   const settings = s.settings || {};
   const [title, setTitle] = useState(s.title || '');
@@ -191,6 +149,39 @@ export function PresetModal({ story, onClose, onSave }) {
     avatarFile: null, avatarPreview: '',
   })));
   const [busy, setBusy] = useState(false);
+  // PresetGen: a description in, a filled-in form out. It never saves.
+  const [genPrompt, setGenPrompt] = useState('');
+  const [genBusy, setGenBusy] = useState(false);
+  const [genError, setGenError] = useState('');
+
+  const applyDraft = (d) => {
+    setTitle(d.title || '');
+    setGenre(d.genre || '');
+    setDescription(d.description || '');
+    setOpening(d.opening || '');
+    setPersonaDesc((d.persona && d.persona.description) || '');
+    setSystemPrompt((d.settings && d.settings.systemPrompt) || '');
+    setCharacters((d.characters || []).map((c) => ({
+      key: 'c' + Math.random().toString(36).slice(2),
+      id: c.id || '', name: c.name || '', description: c.description || '',
+      avatar: c.avatar || '', voice: c.voice || '',
+      avatarFile: null, avatarPreview: '',
+    })));
+  };
+  const runGenerate = async () => {
+    const text = genPrompt.trim();
+    if (!text || genBusy || !onGenerate) return;
+    setGenBusy(true);
+    setGenError('');
+    try {
+      const draft = await onGenerate(text);
+      if (draft) applyDraft(draft);
+    } catch (err) {
+      setGenError((err && err.message) || 'Generation failed.');
+    } finally {
+      setGenBusy(false);
+    }
+  };
 
   const update = (index, patch) => setCharacters((cur) => cur.map((c, i) => (i === index ? { ...c, ...patch } : c)));
   const remove = (index) => setCharacters((cur) => cur.filter((_, i) => i !== index));
@@ -227,6 +218,20 @@ export function PresetModal({ story, onClose, onSave }) {
         <header class="modal-head"><h2>${s.id ? 'Edit preset' : 'New preset'}</h2>
           <button class="icon-btn" type="button" onClick=${onClose}>×</button></header>
         <div class="modal-body">
+          ${onGenerate && html`
+            <section class="preset-gen">
+              <label class="field"><span>✨ Generate from a description</span>
+                <textarea rows="3" value=${genPrompt}
+                          placeholder="A drowned library where the last archivist remembers the surface."
+                          onInput=${ (e) => setGenPrompt(e.currentTarget.value) }></textarea></label>
+              <div class="row" style="align-items:center">
+                <button class="btn btn-ghost btn-sm" type="button" disabled=${genBusy || !genPrompt.trim()}
+                        onClick=${runGenerate}>${genBusy ? 'Drafting…' : 'Generate'}</button>
+                <span class="hint">Fills the fields below. Nothing is saved until you press Save.</span>
+              </div>
+              ${genError && html`<p class="login-error">${genError}</p>`}
+            </section>
+            <hr />`}
           <div class="story-avatar-row">
             <label class="avatar-picker" title="Story avatar">
               ${src ? html`<img src=${src} alt="" />` : '+'}

@@ -260,6 +260,11 @@ hr { border: none; border-top: 1px solid var(--border); margin: 2px 0; }
 
 .choices-label { font-size: 11.5px; color: var(--muted); }
 
+.preset-gen {
+  display: flex; flex-direction: column; gap: 8px; padding: 10px 12px;
+  border: 1px solid var(--border); border-radius: 12px; background: var(--bg-soft);
+}
+
 .char-editor { border: 1px solid var(--border); border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
 .char-editor-head { display: flex; align-items: center; justify-content: space-between; }
 .char-editor-title { font-size: 12.5px; color: var(--muted); }

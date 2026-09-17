@@ -305,12 +305,16 @@ export function Composer({ streaming, disabled, uploading, hasChoices, onSend, o
     </footer>`;
 }
 
-export function Sidebar({ sessions, activeId, open, auth, onOpen, onNew, onSettings, onTools, onStories, onDelete, onLogout }) {
+export function Sidebar({ sessions, activeId, open, auth, onOpen, onNew, onGenerate, onSettings, onTools, onStories, onDelete, onLogout }) {
   return html`
     <aside class=${'sidebar' + (open ? ' open' : '')} aria-label="Stories">
       <div class="sidebar-head">
         <span class="brand"><span class="brand-mark">◆</span> Genesis</span>
-        <button class="btn btn-primary btn-sm" type="button" onClick=${onNew}>New story</button>
+        <span class="row" style="gap:6px;align-items:center">
+          ${onGenerate && html`<button class="btn btn-ghost btn-sm" type="button"
+            title="Generate a preset from a description" onClick=${onGenerate}>✨</button>`}
+          <button class="btn btn-primary btn-sm" type="button" onClick=${onNew}>New story</button>
+        </span>
       </div>
       <nav class="session-list">
         ${!sessions.length && html`<p class="muted" style="padding:10px">No stories yet.</p>`}
