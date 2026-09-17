@@ -139,10 +139,13 @@ func (a *Agent) Continue(ctx context.Context, sess *store.Session, emit func(Eve
 
 		if len(resp.ToolCalls) == 0 {
 			if txt := strings.TrimSpace(resp.Content); txt != "" {
+				// The model answered with prose instead of a tool call. It is
+				// unowned, so it must not borrow the first character's name and
+				// avatar: attribute it to the narrator.
 				tc.Show(&store.Message{
 					Role:    llm.RoleAssistant,
 					Kind:    store.KindNarration,
-					Speaker: narratorName(sess),
+					Speaker: "Narrator",
 					Text:    txt,
 				})
 				sess.History = append(sess.History, llm.Message{Role: llm.RoleAssistant, Content: resp.Content})

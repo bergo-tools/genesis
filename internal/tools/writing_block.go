@@ -38,6 +38,10 @@ func writingBlockTool() *agent.Tool {
 			if err := decode(args, &a); err != nil {
 				return nil, err
 			}
+			name := strings.TrimSpace(a.Speaker)
+			if name == "" {
+				return nil, errors.New("speaker is required: name the character this beat belongs to")
+			}
 			blocks := cleanBlocks(a.Blocks)
 			if len(blocks) == 0 {
 				return nil, errors.New("blocks is required")
@@ -50,7 +54,7 @@ func writingBlockTool() *agent.Tool {
 			tc.Show(&store.Message{
 				Role:    "assistant",
 				Kind:    kind,
-				Speaker: resolveSpeaker(tc, a.Speaker),
+				Speaker: castName(tc, name),
 				Blocks:  blocks,
 				Text:    prose,
 			})
@@ -88,9 +92,36 @@ func proseOf(blocks []store.Block) string {
 	return strings.Join(parts, "\n\n")
 }
 
-func resolveSpeaker(tc *agent.TurnContext, name string) string {
-	if n := strings.TrimSpace(name); n != "" {
-		return n
+// castName maps the name the model wrote onto the cast, so a near miss such as
+// "奥尔多" for "奥尔多修士" still gets that character's avatar and groups with
+// their other beats. It never guesses: an unknown or ambiguous name is passed
+// through exactly as written, so a wrong name is visible instead of silent.
+func castName(tc *agent.TurnContext, name string) string {
+	name = strings.TrimSpace(name)
+	if tc == nil || tc.Session == nil {
+		return name
 	}
-	return tc.PrimaryName()
+	want := strings.ToLower(name)
+	hit := ""
+	hits := 0
+	for _, c := range tc.Session.Characters {
+		if c == nil {
+			continue
+		}
+		have := strings.ToLower(strings.TrimSpace(c.Name))
+		if have == "" {
+			continue
+		}
+		switch {
+		case have == want:
+			return c.Name
+		case strings.Contains(have, want), strings.Contains(want, have):
+			hit = c.Name
+			hits++
+		}
+	}
+	if hits == 1 {
+		return hit
+	}
+	return name
 }

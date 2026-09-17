@@ -157,7 +157,12 @@ export function MessageList({ session, streaming, onNewStory, onSpeak, speakingI
   const grouped = {};
   let previousKey = null;
   for (const m of messages) {
-    const key = m.role === 'user' ? 'user:' + m.id : 'assistant:' + String(m.speaker || m.kind || '').toLowerCase();
+    // A message with no speaker gets a key of its own. Falling back to the kind
+    // would let two unrelated beats merge, hiding the second one's name and
+    // avatar so it reads as a continuation of the first.
+    const key = m.role === 'user'
+      ? 'user:' + m.id
+      : (m.speaker ? 'assistant:' + String(m.speaker).toLowerCase() : 'unowned:' + m.id);
     grouped[m.id] = previousKey === key;
     previousKey = key;
   }

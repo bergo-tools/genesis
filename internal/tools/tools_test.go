@@ -54,17 +54,65 @@ func TestWritingBlockKeepsOrderAndThoughts(t *testing.T) {
 
 	// A thoughts-only beat is allowed but is not the player-facing beat.
 	tc2 := &agent.TurnContext{Session: &store.Session{}, Emit: func(agent.Event) {}}
-	if _, err := tool.Handler(context.Background(), tc2, json.RawMessage(`{"blocks":[{"type":"thought","text":"嗯。"}]}`)); err != nil {
+	if _, err := tool.Handler(context.Background(), tc2, json.RawMessage(`{"speaker":"Ilyra","blocks":[{"type":"thought","text":"嗯。"}]}`)); err != nil {
 		t.Fatal(err)
 	}
 	if tc2.PlayerFacing {
 		t.Fatal("thoughts alone must not count as player facing")
 	}
-	if _, err := tool.Handler(context.Background(), tc2, json.RawMessage(`{"blocks":[]}`)); err == nil {
+	if _, err := tool.Handler(context.Background(), tc2, json.RawMessage(`{"speaker":"Ilyra","blocks":[]}`)); err == nil {
 		t.Fatal("expected an error when there are no blocks")
 	}
-	if _, err := tool.Handler(context.Background(), tc2, json.RawMessage(`{"blocks":[{"type":"text","text":"   "}]}`)); err == nil {
+	if _, err := tool.Handler(context.Background(), tc2, json.RawMessage(`{"speaker":"Ilyra","blocks":[{"type":"text","text":"   "}]}`)); err == nil {
 		t.Fatal("expected an error when every block is blank")
+	}
+}
+
+// A beat with no speaker must fail loudly: quietly falling back to the first
+// character is how one character's lines get attributed to another.
+func TestWritingBlockRequiresSpeaker(t *testing.T) {
+	sess := &store.Session{Characters: []*store.Character{{ID: "c1", Name: "Ilyra"}}}
+	tc := &agent.TurnContext{Session: sess, Emit: func(agent.Event) {}}
+	if _, err := writingBlockTool().Handler(context.Background(), tc,
+		json.RawMessage(`{"blocks":[{"type":"text","text":"站住。"}]}`)); err == nil {
+		t.Fatal("expected an error when the speaker is missing")
+	}
+	if len(sess.Messages) != 0 {
+		t.Fatalf("no message may be attributed without a speaker: %+v", sess.Messages)
+	}
+}
+
+// Models drop titles. "奥尔多" must still land on "奥尔多修士" so the avatar and
+// grouping stay right, while an unknown name is left alone and stays visible.
+func TestWritingBlockMatchesCastName(t *testing.T) {
+	sess := &store.Session{Characters: []*store.Character{
+		{ID: "c1", Name: "瑟蕾丝·维恩"},
+		{ID: "c2", Name: "奥尔多修士"},
+	}}
+	tc := &agent.TurnContext{Session: sess, Emit: func(agent.Event) {}}
+	tool := writingBlockTool()
+	call := func(speaker string) string {
+		t.Helper()
+		arg, err := json.Marshal(map[string]any{
+			"speaker": speaker,
+			"blocks":  []map[string]string{{"type": "text", "text": "…"}},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tool.Handler(context.Background(), tc, arg); err != nil {
+			t.Fatal(err)
+		}
+		return sess.Messages[len(sess.Messages)-1].Speaker
+	}
+	if got := call("奥尔多"); got != "奥尔多修士" {
+		t.Fatalf("partial name = %q, want the cast spelling", got)
+	}
+	if got := call("奥尔"); got != "奥尔多修士" {
+		t.Fatalf("shorter prefix = %q, want the cast spelling", got)
+	}
+	if got := call("某位路人"); got != "某位路人" {
+		t.Fatalf("unknown name = %q, want it left as written", got)
 	}
 }
 

@@ -55,6 +55,8 @@ const chat = renderToString(h(MessageList, {
       { id: 'a1', role: 'assistant', kind: 'speech', speaker: 'Ilyra', text: 'well met' },
       { id: 'a2', role: 'assistant', kind: 'action', speaker: 'Ilyra', text: 'She steps closer.' },
       { id: 'u2', role: 'user', kind: 'user', text: 'Draw the blade', choice: true },
+      { id: 'x1', role: 'assistant', kind: 'speech', speaker: '', text: 'unowned one' },
+      { id: 'x2', role: 'assistant', kind: 'speech', speaker: '', text: 'unowned two' },
       {
         id: 'a3', role: 'assistant', kind: 'speech', speaker: 'Ilyra', text: '她向前一步。站住。',
         blocks: [
@@ -111,8 +113,8 @@ if (narratorBlock.includes('class="avatar"')) {
   process.exit(1);
 }
 const avatarCount = (chat.match(/class="avatar"/g) || []).length;
-if (avatarCount !== 5) {
-  console.error('expected 5 avatars (two user turns + three Ilyra beats), got ' + avatarCount);
+if (avatarCount !== 7) {
+  console.error('expected 7 avatars (two user turns + three Ilyra beats + two unowned), got ' + avatarCount);
   process.exit(1);
 }
 
@@ -120,6 +122,15 @@ if (avatarCount !== 5) {
 const blockOrder = ['她向前一步。', '他太年轻了。', '站住。'].map((s) => chat.indexOf(s));
 if (!(blockOrder[0] >= 0 && blockOrder[0] < blockOrder[1] && blockOrder[1] < blockOrder[2])) {
   console.error('writing_block blocks rendered out of order: ' + blockOrder.join(', '));
+  process.exit(1);
+}
+
+// Two beats with no speaker must not merge: merging would hide the second
+// one's name and avatar, so it would read as a continuation of the first.
+const x2At = chat.indexOf('data-id="x2"');
+const x2Open = chat.slice(chat.lastIndexOf('<div', x2At), x2At);
+if (x2Open.includes('grouped')) {
+  console.error('a message with no speaker must not be grouped: ' + x2Open);
   process.exit(1);
 }
 
