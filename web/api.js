@@ -78,6 +78,7 @@ export const api = {
   stories: () => requestJSON('/api/stories'),
   story: (id) => requestJSON('/api/stories/' + encodeURIComponent(id)),
   createStory: (body) => post('/api/stories', body),
+  generateStory: (body) => post('/api/stories/generate', body),
   patchStory: (id, body) => patch('/api/stories/' + encodeURIComponent(id), body),
   deleteStory: (id) => requestJSON('/api/stories/' + encodeURIComponent(id), { method: 'DELETE' }),
   uploadStoryAsset,

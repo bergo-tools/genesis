@@ -84,6 +84,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/tools", s.handleTools)
 	mux.HandleFunc("GET /api/stories", s.handleListStories)
 	mux.HandleFunc("POST /api/stories", s.handleCreateStory)
+	mux.HandleFunc("POST /api/stories/generate", s.handleGenerateStory)
 	mux.HandleFunc("GET /api/stories/{id}", s.handleGetStory)
 	mux.HandleFunc("PATCH /api/stories/{id}", s.handlePatchStory)
 	mux.HandleFunc("DELETE /api/stories/{id}", s.handleDeleteStory)

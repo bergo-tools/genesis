@@ -22,7 +22,7 @@ function StoryAvatar({ story, size = 40 }) {
     </div>`;
 }
 
-export function NewSessionModal({ stories, onClose, onCreate }) {
+export function NewSessionModal({ stories, onClose, onCreate, onGenerate }) {
   const list = stories || [];
   const [storyId, setStoryId] = useState(list.length ? list[0].id : '');
   const [title, setTitle] = useState('');
@@ -46,7 +46,9 @@ export function NewSessionModal({ stories, onClose, onCreate }) {
           <button class="icon-btn" type="button" onClick=${onClose}>×</button></header>
         <div class="modal-body">
           ${!list.length
-            ? html`<p class="muted">No presets yet. Create one under Stories first.</p>`
+            ? html`<p class="muted">No presets yet. Create one under Stories first.</p>
+                ${onGenerate && html`<p><button class="btn btn-ghost btn-sm" type="button"
+                  onClick=${onGenerate}>✨ Generate a preset</button></p>`}`
             : html`
               <div>
                 <strong>Pick a story</strong>
@@ -85,7 +87,49 @@ export function NewSessionModal({ stories, onClose, onCreate }) {
     </div>`;
 }
 
-export function StoriesModal({ stories, onClose, onStart, onEdit, onNew, onDelete }) {
+// PresetGenModal asks for a description and has the model draft a preset. The
+// draft lands in the normal preset editor, so nothing is saved unseen.
+export function PresetGenModal({ onClose, onGenerate }) {
+  const [prompt, setPrompt] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const submit = async () => {
+    const text = prompt.trim();
+    if (!text || busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      await onGenerate(text);
+    } catch (err) {
+      setError((err && err.message) || 'Generation failed.');
+      setBusy(false);
+    }
+  };
+  return html`
+    <div class="modal" onClick=${ (e) => { if (e.target === e.currentTarget && !busy) onClose(); } }>
+      <div class="modal-card">
+        <header class="modal-head"><h2>Generate a preset</h2>
+          <button class="icon-btn" type="button" disabled=${busy} onClick=${onClose}>×</button></header>
+        <div class="modal-body">
+          <p class="hint">Describe the story you want. The model drafts a title, an opening, a cast and
+             the story instructions; you review and edit them before saving.</p>
+          <label class="field"><span>Description</span>
+            <textarea rows="5" value=${prompt}
+                      placeholder="A drowned library where the last archivist remembers the surface."
+                      onInput=${ (e) => setPrompt(e.currentTarget.value) }></textarea></label>
+          ${error && html`<p class="login-error">${error}</p>`}
+        </div>
+        <footer class="modal-foot">
+          <button class="btn btn-ghost" type="button" disabled=${busy} onClick=${onClose}>Cancel</button>
+          <button class="btn btn-primary" type="button" disabled=${busy || !prompt.trim()} onClick=${submit}>
+            ${busy ? 'Drafting…' : 'Generate'}
+          </button>
+        </footer>
+      </div>
+    </div>`;
+}
+
+export function StoriesModal({ stories, onClose, onStart, onEdit, onNew, onGenerate, onDelete }) {
   const list = stories || [];
   return html`
     <div class="modal" onClick=${ (e) => { if (e.target === e.currentTarget) onClose(); } }>
@@ -95,7 +139,11 @@ export function StoriesModal({ stories, onClose, onStart, onEdit, onNew, onDelet
         <div class="modal-body">
           <div class="row" style="justify-content:space-between;align-items:center">
             <span class="hint">${list.length + ' presets · every session starts from one'}</span>
-            <button class="btn btn-primary btn-sm" type="button" onClick=${onNew}>+ New preset</button>
+            <span class="row" style="gap:6px;align-items:center">
+              ${onGenerate && html`<button class="btn btn-ghost btn-sm" type="button"
+                onClick=${onGenerate}>✨ Generate</button>`}
+              <button class="btn btn-primary btn-sm" type="button" onClick=${onNew}>+ New preset</button>
+            </span>
           </div>
           <div class="preset-list">
             ${!list.length && html`<p class="muted">No presets yet.</p>`}

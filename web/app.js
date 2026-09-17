@@ -4,7 +4,7 @@ import htm from './vendor/htm.module.js';
 import { api, uploadAsset, setUnauthorizedHandler } from './api.js';
 import * as C from './components.js';
 import { StoryModal } from './story.js';
-import { NewSessionModal, StoriesModal, PresetModal } from './library.js';
+import { NewSessionModal, StoriesModal, PresetModal, PresetGenModal } from './library.js';
 import { Login } from './login.js';
 
 const html = htm.bind(h);
@@ -472,6 +472,16 @@ export function App({ initialAuth = null } = {}) {
     }
   }, [pushToast]);
 
+  // generatePreset drafts a preset from a description and hands it to the normal
+  // editor, so nothing is saved before the user has seen it.
+  const generatePreset = useCallback(async (prompt) => {
+    const data = await api.generateStory({ prompt });
+    if (data && data.story) {
+      setEditingStory(data.story);
+      setModal('preset');
+    }
+  }, []);
+
   const startSession = useCallback(async (data) => {
     cancelStream();
     try {
@@ -774,11 +784,15 @@ export function App({ initialAuth = null } = {}) {
                             chatModels=${chatModels} onReloadModels=${reloadChatModels}
                             onLoadSpeechModels=${loadSpeechModels} tools=${allTools} />`}
       ${modal === 'new-session' && html`
-        <${NewSessionModal} stories=${stories} onClose=${() => setModal(null)} onCreate=${startSession} />`}
+        <${NewSessionModal} stories=${stories} onClose=${() => setModal(null)} onCreate=${startSession}
+                          onGenerate=${() => setModal('preset-gen')} />`}
       ${modal === 'stories' && html`
         <${StoriesModal} stories=${stories} onClose=${() => setModal(null)}
                          onStart=${async (id) => { await loadStories(); await startSession({ storyId: id }); }}
-                         onEdit=${openPreset} onNew=${() => openPreset(null)} onDelete=${deletePreset} />`}
+                         onEdit=${openPreset} onNew=${() => openPreset(null)}
+                         onGenerate=${() => setModal('preset-gen')} onDelete=${deletePreset} />`}
+      ${modal === 'preset-gen' && html`
+        <${PresetGenModal} onClose=${() => setModal(null)} onGenerate=${generatePreset} />`}
       ${modal === 'preset' && html`
         <${PresetModal} story=${editingStory} onClose=${() => setModal(null)} onSave=${savePreset} />`}
       ${modal === 'story' && session && html`

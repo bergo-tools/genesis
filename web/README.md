@@ -8,7 +8,7 @@
 - `tokens.js`：顶栏的上下文占用条与面板里的 Tokens 明细。
 - `picker.js`：可搜索的模型/音色选择器（移动端弹层）。原生的 `<datalist>` 在 iOS Safari 上完全不显示、在 Android 上也很挤，所以所有模型选择都走这里。
 - `story.js`：当前会话的 Story settings 弹窗（标题、头像、故事指令、cast；模型参数走全局 Settings）。
-- `library.js`：New session / Stories / Preset 弹窗（预设只编辑内容，模型与生成参数走全局 Settings）。
+- `library.js`：New session / Stories / Preset / PresetGen 弹窗（预设只编辑内容，模型与生成参数走全局 Settings；PresetGen 生成的是未保存草稿，确认后才落盘）。
 - `login.js`：全屏密码登录页。
 - `api.js`：fetch 封装、资源 URL、NDJSON 解析、401 时退回登录页。
 - `format.js`：HTML 转义 + 轻量 markdown + token 格式化。
