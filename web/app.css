@@ -85,7 +85,6 @@ code { font-family: var(--mono); background: var(--bg-soft); padding: 1px 5px; b
 .msg.grouped .avatar { visibility: hidden; }
 .msg .body { min-width: 0; }
 .msg .speaker { font-size: 11.5px; color: var(--muted); margin-bottom: 1px; display: flex; gap: 8px; align-items: baseline; }
-.msg .speaker .mood { font-style: italic; }
 .msg .text { font-size: 14px; line-height: 1.62; padding: 2px 3px; border-radius: 10px; overflow-wrap: anywhere; }
 .msg.assistant.narration .text { background: transparent; border: none; padding: 2px 4px; color: var(--muted); font-style: italic; max-width: 62ch; }
 .msg.assistant.action .text { background: transparent; border: none; padding: 2px 4px; font-style: italic; opacity: .93; }

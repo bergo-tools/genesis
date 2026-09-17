@@ -77,7 +77,6 @@ type Character struct {
 	ID          string    `json:"id"`
 	Name        string    `json:"name"`
 	Description string    `json:"description,omitempty"`
-	Personality string    `json:"personality,omitempty"`
 	Avatar      string    `json:"avatar,omitempty"`
 	Voice       string    `json:"voice,omitempty"`
 	CreatedAt   time.Time `json:"createdAt"`
@@ -105,7 +104,6 @@ type Message struct {
 	// OOC is an out-of-character instruction the player sent with this
 	// message. It is shown separately and passed to the model as [OOC] text.
 	OOC       string    `json:"ooc,omitempty"`
-	Mood      string    `json:"mood,omitempty"`
 	Images    []string  `json:"images,omitempty"`
 	CreatedAt time.Time `json:"createdAt"`
 	// Snapshot is the world as it was before this user turn ran. A re-roll or

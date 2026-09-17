@@ -256,7 +256,6 @@ type characterInput struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
-	Personality string `json:"personality"`
 	Avatar      string `json:"avatar"`
 	Voice       string `json:"voice"`
 }
@@ -274,7 +273,6 @@ func toCharacter(in characterInput) *store.Character {
 		ID:          id,
 		Name:        name,
 		Description: strings.TrimSpace(in.Description),
-		Personality: strings.TrimSpace(in.Personality),
 		Avatar:      strings.TrimSpace(in.Avatar),
 		Voice:       strings.TrimSpace(in.Voice),
 		CreatedAt:   time.Now().UTC(),

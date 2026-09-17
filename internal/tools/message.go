@@ -22,7 +22,6 @@ func messageTool() *agent.Tool {
 			"text":      stringProp("What the player reads. May be empty when you only have a thought."),
 			"thought":   stringProp("Optional private inner thought, shown dimmed under the text."),
 			"kind":      enumProp("Message kind.", "speech", "action", "narration"),
-			"mood":      stringProp("Optional short mood label for the speaker."),
 			"last_call": lastCallProp(),
 		}),
 		Handler: func(_ context.Context, tc *agent.TurnContext, args json.RawMessage) (any, error) {
@@ -31,7 +30,6 @@ func messageTool() *agent.Tool {
 				Text    string `json:"text"`
 				Thought string `json:"thought"`
 				Kind    string `json:"kind"`
-				Mood    string `json:"mood"`
 			}
 			if err := decode(args, &a); err != nil {
 				return nil, err
@@ -48,7 +46,6 @@ func messageTool() *agent.Tool {
 				Speaker: resolveSpeaker(tc, a.Speaker, kind),
 				Text:    text,
 				Thought: thought,
-				Mood:    strings.TrimSpace(a.Mood),
 			})
 			return map[string]any{"ok": true}, nil
 		},

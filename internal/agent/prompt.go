@@ -95,9 +95,6 @@ func (a *Agent) SystemPrompt(sess *store.Session) string {
 		if c.Description != "" {
 			fmt.Fprintf(&b, "- Description: %s\n", c.Description)
 		}
-		if c.Personality != "" {
-			fmt.Fprintf(&b, "- Personality: %s\n", c.Personality)
-		}
 	}
 
 	b.WriteString("\n# World state\n")

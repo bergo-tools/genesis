@@ -2,8 +2,8 @@
 
 三个内置工具，刻意保持精简。
 
-- `message.go`：一个场景节拍。`text`（对白 / 动作 / 旁白）+ 可选 `thought`（同气泡、暗色显示）、
-  以及 `speaker`、`kind`、`mood`、`last_call`。
+- `message.go`：一个场景节拍。`text`（对白 / 动作 / 旁白）+ 可选 `thought`（同一条消息里暗色显示）、
+  以及 `speaker`、`kind`、`last_call`。
 - `narrator.go`：旁白与环境描写，必填 `text`。以 Narrator 身份留一条 narration 消息，
   用来铺陈场景、推进情节（取代了原来结构化的 scene 工具，那个像填表格，效果不好）。
 - `choices.go`：terminal 工具。可选 narration + 2–4 个短选项（只取 `choices[].text`，不需要描述），

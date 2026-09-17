@@ -503,8 +503,7 @@ export function App({ initialAuth = null } = {}) {
         opening: data.opening,
         persona: data.persona,
         characters: picked.map((c) => ({
-          id: c.id, name: c.name, description: c.description,
-          personality: c.personality, voice: c.voice || '',
+          id: c.id, name: c.name, description: c.description, voice: c.voice || '',
         })),
         settings: data.settings,
       };
@@ -530,7 +529,7 @@ export function App({ initialAuth = null } = {}) {
         }
         withAvatars.push({
           id: base.id || src.id, name: src.name, description: src.description,
-          personality: src.personality, avatar: cAvatar, voice: src.voice || '',
+          avatar: cAvatar, voice: src.voice || '',
         });
       }
       if (changed) {
@@ -578,7 +577,7 @@ export function App({ initialAuth = null } = {}) {
           const up = await uploadAsset(current.id, c.avatarFile);
           avatar = up.name;
         }
-        characters.push({ id: c.id, name, description: c.description, personality: c.personality, avatar, voice: c.voice || '' });
+        characters.push({ id: c.id, name, description: c.description, avatar, voice: c.voice || '' });
       }
       let avatar = data.avatar || '';
       if (data.avatarFile) {

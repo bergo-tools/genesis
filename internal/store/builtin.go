@@ -42,25 +42,25 @@ func emberfallStory() *Story {
 			"你怀里那本残缺的咒典忽然发烫。前方的雾里，有人正等着你。",
 		Characters: []*Character{
 			{
-				ID:          "serelith",
-				Name:        "瑟蕾丝·维恩",
-				Description: "流亡的战场法师，靠替人解咒和卖假护符过活。",
-				Personality: "冷静、刻薄、极度务实；从不解释自己的过去，只谈价钱。",
-				CreatedAt:   now,
+				ID:   "serelith",
+				Name: "瑟蕾丝·维恩",
+				Description: "流亡的战场法师，靠替人解咒和卖假护符过活。冷静、刻薄、极度务实；" +
+					"从不解释自己的过去，只谈价钱。",
+				CreatedAt: now,
 			},
 			{
-				ID:          "ordo",
-				Name:        "奥尔多修士",
-				Description: "灰烬之神的游方教士，背着一匣圣灰，声称能听见结界的心跳。",
-				Personality: "温和、耐心、说话像布道；但每当问到灰烬从何而来，他就沉默。",
-				CreatedAt:   now,
+				ID:   "ordo",
+				Name: "奥尔多修士",
+				Description: "灰烬之神的游方教士，背着一匣圣灰，声称能听见结界的心跳。温和、耐心、" +
+					"说话像布道；但每当问到灰烬从何而来，他就沉默。",
+				CreatedAt: now,
 			},
 			{
-				ID:          "maerwyn",
-				Name:        "梅尔温",
-				Description: "破誓骑士，剑身上还刻着旧王的箴言。",
-				Personality: "骄傲、寡言，把誓言当作枷锁；一旦立誓就绝不回头。",
-				CreatedAt:   now,
+				ID:   "maerwyn",
+				Name: "梅尔温",
+				Description: "破誓骑士，剑身上还刻着旧王的箴言。骄傲、寡言，把誓言当作枷锁；" +
+					"一旦立誓就绝不回头。",
+				CreatedAt: now,
 			},
 		},
 		Settings: Settings{

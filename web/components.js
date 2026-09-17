@@ -72,11 +72,8 @@ export function Message({ message, session, onSpeak, speaking, action, onReroll,
     <div class=${cls} data-id=${message.id}>
       ${avatar !== null && html`<div class="avatar">${avatar}</div>`}
       <div class="body">
-        ${(showSpeaker || message.mood) && html`
-          <div class="speaker">
-            ${showSpeaker && html`<span>${speaker}</span>`}
-            ${message.mood && html`<span class="mood">${message.mood}</span>`}
-          </div>`}
+        ${showSpeaker && html`
+          <div class="speaker"><span>${speaker}</span></div>`}
         ${images.length > 0 && html`
           <div class="attachments">
             ${images.map((src, i) => html`<img class="attachment" key=${i} src=${src} alt="attachment" loading="lazy" />`)}
@@ -381,7 +378,7 @@ export function Panel({ session, activity, open, models, model, onClose, onEditC
                 </div>
                 <div>
                   <div class="name">${c.name || 'Unnamed'}</div>
-                  <div class="desc">${c.description || c.personality || ''}</div>
+                  <div class="desc">${c.description || ''}</div>
                 </div>
               </div>`)}
         </section>
@@ -434,9 +431,6 @@ export function CharacterEditor({ character, index, sessionId, onChange, onRemov
           <label class="field"><span>Description</span>
             <input type="text" value=${character.description} placeholder="An archivist who guards a drowned library."
                    onInput=${set('description')} /></label>
-          <label class="field"><span>Personality</span>
-            <input type="text" value=${character.personality} placeholder="Dry, patient, secretly sentimental."
-                   onInput=${set('personality')} /></label>
           <div class="field"><span>Voice (TTS)</span>
             <${OptionPicker} value=${character.voice} options=${stringOptions(voiceOptions)}
               onChange=${ (v) => onChange(index, { voice: v }) }

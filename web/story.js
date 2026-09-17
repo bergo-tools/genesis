@@ -31,7 +31,7 @@ export function StoryModal({ session, onClose, onSave, speechModel, onLoadSpeech
   const [characters, setCharacters] = useState(() => (s.characters || []).map((c) => ({
     key: 'c' + Math.random().toString(36).slice(2),
     id: c.id || '', name: c.name || '', description: c.description || '',
-    personality: c.personality || '', avatar: c.avatar || '', voice: c.voice || '',
+    avatar: c.avatar || '', voice: c.voice || '',
     avatarFile: null, avatarPreview: '',
   })));
   const [busy, setBusy] = useState(false);
@@ -89,7 +89,7 @@ export function StoryModal({ session, onClose, onSave, speechModel, onLoadSpeech
               <button class="btn btn-ghost btn-sm" type="button"
                       onClick=${ () => setCharacters((cur) => cur.concat([{
                         key: 'c' + Math.random().toString(36).slice(2), id: '', name: '', description: '',
-                        personality: '', avatar: '', voice: '', avatarFile: null, avatarPreview: '',
+                        avatar: '', voice: '', avatarFile: null, avatarPreview: '',
                       }])) }>+ Add character</button>
             </div>
             ${characters.map((c, i) => html`

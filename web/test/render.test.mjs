@@ -43,7 +43,7 @@ const session = {
   id: 's1',
   storyTitle: 'Emberfall',
   settings: {},
-  characters: [{ id: 'c1', name: 'Ilyra', description: 'archivist', personality: 'dry', voice: 'af_heart', avatar: '' }],
+  characters: [{ id: 'c1', name: 'Ilyra', description: 'archivist', voice: 'af_heart', avatar: '' }],
 };
 
 const chat = renderToString(h(MessageList, {
