@@ -11,9 +11,12 @@ agent 循环：模型的一切输出都是工具调用，这里负责把它们�
     会话不存这些值，所以改 Settings 对进行中的会话也立即生效。
   - `activeTools`：按全局 `disabledTools` 与 `choicesEnabled` 过滤。被禁用的工具不会执行，
     也不能用 `last_call` / `terminal` / `choices` 结束回合。
-  - choices 启用时强制在回合末尾调用，缺失会自动提醒并继续（最多 2 次）。
+  - choices 启用时强制在回合末尾调用；缺失就继续追加 `[system]` 提醒，直到步数预算用完
+    （不再向用户报错）。
   - choices 未启用时，`last_call=true` 结束回合。
   - `trimHistory`：80 条消息 + 约 24000 token 双上限，始终保留最新一条，且不拆散 tool 结果配对。
-- `prompt.go`：每次请求动态拼 system prompt（工具列表、收尾规则、玩家、cast、世界状态）。
+- `prompt.go`：每次请求动态拼 system prompt。固定 preamble 里除了工具协议，还有一份
+  **写作 brief**（长度、具体感、五感、节奏、潜台词、收尾方式，`prompt_test.go` 会守住它），
+  之后依次拼接工具列表、收尾规则、全局/故事指令、玩家、cast、世界状态。
 
 扩展方式：在 `internal/tools` 新增工具并注册，prompt 与请求会自动带上。
