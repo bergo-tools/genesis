@@ -16,7 +16,7 @@ func TestWritingBlockKeepsOrderAndThoughts(t *testing.T) {
 	tool := writingBlockTool()
 
 	raw := `{"speaker":"Ilyra","blocks":[
-	  {"type":"text","kind":"action","text":"她向前一步。"},
+	  {"type":"text","text":"她向前一步。"},
 	  {"type":"thought","text":"他太年轻了。"},
 	  {"type":"text","text":"站住。"}
 	]}`
@@ -30,14 +30,14 @@ func TestWritingBlockKeepsOrderAndThoughts(t *testing.T) {
 	if len(m.Blocks) != 3 {
 		t.Fatalf("want 3 blocks, got %+v", m.Blocks)
 	}
-	if m.Blocks[0].Type != store.BlockText || m.Blocks[0].Kind != store.KindAction {
+	if m.Blocks[0].Type != store.BlockText || m.Blocks[0].Text != "她向前一步。" {
 		t.Fatalf("block 0 = %+v", m.Blocks[0])
 	}
 	if m.Blocks[1].Type != store.BlockThought || m.Blocks[1].Text != "他太年轻了。" {
 		t.Fatalf("block 1 = %+v", m.Blocks[1])
 	}
-	if m.Blocks[2].Kind != store.KindSpeech {
-		t.Fatalf("a text block must default to speech, got %q", m.Blocks[2].Kind)
+	if m.Blocks[2].Type != store.BlockText || m.Blocks[2].Text != "站住。" {
+		t.Fatalf("block 2 = %+v", m.Blocks[2])
 	}
 	if !strings.Contains(m.Text, "她向前一步。") || !strings.Contains(m.Text, "站住。") {
 		t.Fatalf("joined prose = %q", m.Text)

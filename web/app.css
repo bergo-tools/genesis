@@ -316,8 +316,6 @@ hr { border: none; border-top: 1px solid var(--border); margin: 2px 0; }
 .preset-actions { display: flex; flex-direction: column; gap: 4px; flex: none; }
 
 .msg .text > * + * { margin-top: 6px; }
-.block.action { font-style: italic; opacity: .93; }
-.block.narration { color: var(--muted); font-style: italic; }
 
 .thought-inline { margin-top: 6px; padding: 7px 11px; border-left: 3px solid var(--accent); border-radius: 0 10px 10px 0; background: color-mix(in srgb, var(--accent-soft) 45%, transparent); color: var(--muted); font-style: italic; font-size: 13.5px; }
 .session-item { display: flex; align-items: stretch; gap: 4px; border-radius: 10px; border: 1px solid transparent; }

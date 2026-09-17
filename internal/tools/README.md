@@ -2,8 +2,8 @@
 
 三个内置工具，刻意保持精简。
 
-- `writing_block.go`：一个角色的一个节拍。`speaker` + `blocks`：有序的 `{type, kind?, text}` 列表，
-  `type` 是 `text`（对白 / 动作 / 旁白，`kind` 默认 speech）或 `thought`（暗色显示）。
+- `writing_block.go`：一个角色的一个节拍。`speaker` + `blocks`：有序的 `{type, text}` 列表，
+  `type` 只有 `text`（玩家读到的正文：对白 / 动作 / 描写）或 `thought`（角色内心，暗色显示）。
   列表形式让内心想法能插在两句对白之间，更接近小说的排版。消息级 `Text` 仍是所有 text 块的拼接，
   供 TTS / 标题 / 旧数据使用。
 - `narrator.go`：旁白与环境描写，必填 `text`。以 Narrator 身份留一条 narration 消息，

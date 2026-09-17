@@ -58,7 +58,7 @@ const chat = renderToString(h(MessageList, {
       {
         id: 'a3', role: 'assistant', kind: 'speech', speaker: 'Ilyra', text: '她向前一步。站住。',
         blocks: [
-          { type: 'text', kind: 'action', text: '她向前一步。' },
+          { type: 'text', text: '她向前一步。' },
           { type: 'thought', text: '他太年轻了。' },
           { type: 'text', text: '站住。' },
         ],
@@ -123,7 +123,7 @@ if (!(blockOrder[0] >= 0 && blockOrder[0] < blockOrder[1] && blockOrder[1] < blo
   process.exit(1);
 }
 
-const total = check('MessageList', chat, ['hello there', 'well met', '✎', '↻', 'The fog thickens.', 'She steps closer.', 'msg assistant action grouped', 'choice-tag', 'msg user from-choice', 'Draw the blade', 'class="block action"', 'class="thought-inline"', 'class="msg assistant"'])
+const total = check('MessageList', chat, ['hello there', 'well met', '✎', '↻', 'The fog thickens.', 'She steps closer.', 'msg assistant action grouped', 'choice-tag', 'msg user from-choice', 'Draw the blade', 'class="block"', 'class="thought-inline"', 'class="msg assistant"'])
   + check('App', app, ['Genesis', 'Begin a story', 'Create a story to start…', 'agentic roleplay', 'Generate a preset from a description'])
   + check('SettingsModal', settings, ['tool-toggles', 'toggle-row', 'picker-trigger', '<select'])
   + check('StoryModal', sessionSettings, ['Story settings', 'Story instructions', '+ Add character', 'picker-trigger', 'field-tag', 'marks what the model actually reads'])

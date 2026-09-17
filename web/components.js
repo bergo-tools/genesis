@@ -53,8 +53,7 @@ function renderBlock(block, index) {
     return html`<div class="thought-inline" key=${index}
       dangerouslySetInnerHTML=${{ __html: formatText(block.text) }}></div>`;
   }
-  const kind = block.kind && block.kind !== 'speech' ? ' ' + block.kind : '';
-  return html`<div class=${'block' + kind} key=${index}
+  return html`<div class="block" key=${index}
     dangerouslySetInnerHTML=${{ __html: formatText(block.text) }}></div>`;
 }
 

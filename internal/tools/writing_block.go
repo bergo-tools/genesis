@@ -16,15 +16,14 @@ import (
 func writingBlockTool() *agent.Tool {
 	block := object(map[string]any{
 		"type": enumProp("text is prose the player reads; thought is the character's private inner voice.", "text", "thought"),
-		"kind": enumProp("Text blocks only: speech (default), action or narration.", "speech", "action", "narration"),
 		"text": stringProp("The line itself."),
 	}, "type", "text")
 	return &agent.Tool{
 		Name:     "writing_block",
 		Category: "narrative",
 		Description: "One beat of the scene, from one character. blocks is an ordered list: text blocks " +
-			"are what the player reads (speech, an action or narration), thought blocks are that " +
-			"character's private inner voice, rendered dimmed. Interleave them to follow the " +
+			"are the prose the player reads (dialogue, an action, a description), thought blocks are " +
+			"that character's private inner voice, rendered dimmed. Interleave them to follow the " +
 			"character's mind from line to line. Call it once per character per turn.",
 		Parameters: object(map[string]any{
 			"speaker":   stringProp("Exact character name from the cast."),
@@ -43,20 +42,24 @@ func writingBlockTool() *agent.Tool {
 			if len(blocks) == 0 {
 				return nil, errors.New("blocks is required")
 			}
-			kind := messageKind(blocks)
+			prose := proseOf(blocks)
+			kind := store.KindThought
+			if prose != "" {
+				kind = store.KindSpeech
+			}
 			tc.Show(&store.Message{
 				Role:    "assistant",
 				Kind:    kind,
-				Speaker: resolveSpeaker(tc, a.Speaker, kind),
+				Speaker: resolveSpeaker(tc, a.Speaker),
 				Blocks:  blocks,
-				Text:    proseOf(blocks),
+				Text:    prose,
 			})
 			return map[string]any{"ok": true, "blocks": len(blocks)}, nil
 		},
 	}
 }
 
-// cleanBlocks trims the list, drops empty lines and normalises the type/kind.
+// cleanBlocks trims the list, drops empty lines and normalises the type.
 func cleanBlocks(in []store.Block) []store.Block {
 	out := make([]store.Block, 0, len(in))
 	for _, b := range in {
@@ -64,11 +67,11 @@ func cleanBlocks(in []store.Block) []store.Block {
 		if text == "" {
 			continue
 		}
+		kind := store.BlockText
 		if strings.EqualFold(strings.TrimSpace(b.Type), store.BlockThought) {
-			out = append(out, store.Block{Type: store.BlockThought, Text: text})
-			continue
+			kind = store.BlockThought
 		}
-		out = append(out, store.Block{Type: store.BlockText, Kind: textKind(b.Kind), Text: text})
+		out = append(out, store.Block{Type: kind, Text: text})
 	}
 	return out
 }
@@ -85,34 +88,9 @@ func proseOf(blocks []store.Block) string {
 	return strings.Join(parts, "\n\n")
 }
 
-// messageKind is the message-level kind: the first prose block's kind, or
-// thought when the beat is thoughts only.
-func messageKind(blocks []store.Block) string {
-	for _, b := range blocks {
-		if b.Type == store.BlockText {
-			return b.Kind
-		}
-	}
-	return store.KindThought
-}
-
-func textKind(kind string) string {
-	switch strings.ToLower(strings.TrimSpace(kind)) {
-	case "action", "act", "do":
-		return store.KindAction
-	case "narration", "narrate":
-		return store.KindNarration
-	default:
-		return store.KindSpeech
-	}
-}
-
-func resolveSpeaker(tc *agent.TurnContext, name, kind string) string {
+func resolveSpeaker(tc *agent.TurnContext, name string) string {
 	if n := strings.TrimSpace(name); n != "" {
 		return n
-	}
-	if kind == store.KindNarration {
-		return "Narrator"
 	}
 	return tc.PrimaryName()
 }

@@ -91,8 +91,7 @@ const (
 
 // Block is one piece of a character's beat, in the order the model wrote it.
 type Block struct {
-	Type string `json:"type"`           // text | thought
-	Kind string `json:"kind,omitempty"` // text blocks only: speech | action | narration
+	Type string `json:"type"` // text | thought
 	Text string `json:"text"`
 }
 
