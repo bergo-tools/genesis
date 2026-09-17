@@ -8,7 +8,7 @@
 ## 功能
 
 - **一切皆工具调用**：内置 `message`（对白 / 动作 / 旁白 + 内心想法）、
-  `scene`（地点 / 时间 / 天气 / 背景）、`choices`（回合末尾给出 2–4 个选项）三个工具，
+  `narrator`（环境 / 氛围 / 情节推进）、`choices`（回合末尾给出 2–4 个选项）三个工具，
   全部带 `last_call`；工具开关是全局的，禁用的工具绝不会执行。
 - **Story 预设 + Session 会话**：预设是可复用模板（cast、开场、故事指令、种子状态）；
   模型与生成参数只有一份，放在全局 Settings 里，改完全部会话（含进行中的）下一回合即生效；
@@ -16,7 +16,7 @@
 - **多角色 cast**：每个角色有名字、设定、性格、头像与 TTS 音色。
 - **图片**：预设 / 会话头像、角色头像、聊天配图；聊天图片作为多模态输入发给模型。
 - **按回合重 roll / 编辑**：每个 AI 回合末尾有 ↻（先确认），用户消息可 ✎ 编辑并重跑；
-  重 roll 会回滚该回合改过的场景与世界状态，失败时整轮恢复。
+  重 roll 会回滚该回合改过的世界状态，失败时整轮恢复。
 - **OOC 场外指令**：输入框旁的 OOC 按钮，内容以 `[OOC]` 指令随本轮一起发给模型。
 - **可打断**：生成中 Send 变为 Cancel。
 - **思考强度**：off / minimal / low / medium / high / max，全局设置。
@@ -36,7 +36,7 @@
 | `internal/llm/` | provider 中立的 Chat 类型 + OpenRouter 适配 + TTS |
 | `internal/store/` | 数据模型、按目录持久化、资源与摘要缓存 |
 | `internal/agent/` | 工具注册表、agent 循环、事件、system prompt |
-| `internal/tools/` | message / scene / choices 三个内置工具 |
+| `internal/tools/` | message / narrator / choices 三个内置工具 |
 | `internal/server/` | HTTP 路由、NDJSON 流、鉴权中间件 |
 | `web/` | Preact + htm 前端（无构建，`go:embed` 打包） |
 

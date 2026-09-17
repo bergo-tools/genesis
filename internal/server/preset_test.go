@@ -25,7 +25,7 @@ func doJSON(t *testing.T, srv *Server, method, path, body string) *httptest.Resp
 func TestGenerationOptionsAreGlobal(t *testing.T) {
 	srv, cfg := newTestServer(t)
 
-	if rec := putConfig(t, srv, `{"model":"global/model","temperature":0.5,"maxTokens":777,"maxSteps":4,"reasoningEffort":"low","choicesEnabled":true,"disabledTools":["scene"]}`); rec.Code != http.StatusOK {
+	if rec := putConfig(t, srv, `{"model":"global/model","temperature":0.5,"maxTokens":777,"maxSteps":4,"reasoningEffort":"low","choicesEnabled":true,"disabledTools":["narrator"]}`); rec.Code != http.StatusOK {
 		t.Fatalf("PUT /api/config = %d: %s", rec.Code, rec.Body.String())
 	}
 

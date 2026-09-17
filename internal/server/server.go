@@ -137,7 +137,7 @@ func (s *Server) streamTurn(w http.ResponseWriter, r *http.Request, sess *store.
 		mu.Lock()
 		defer mu.Unlock()
 		switch ev.Type {
-		case agent.EventMessage, agent.EventScene, agent.EventChoices:
+		case agent.EventMessage, agent.EventChoices:
 			effects++
 		}
 		if err := enc.Encode(ev); err != nil {

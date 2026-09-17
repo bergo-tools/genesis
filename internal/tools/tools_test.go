@@ -41,25 +41,28 @@ func TestMessageMergesThought(t *testing.T) {
 	}
 }
 
-func TestSceneToolUpdatesAndEmits(t *testing.T) {
+func TestNarratorToolShowsNarration(t *testing.T) {
 	sess := &store.Session{}
-	var got *store.Scene
-	tc := &agent.TurnContext{Session: sess, Emit: func(e agent.Event) {
-		if e.Type == agent.EventScene {
-			got = e.Scene
-		}
-	}}
-	if _, err := sceneTool().Handler(context.Background(), tc, json.RawMessage(`{"location":"灰烬堡","time":"黄昏"}`)); err != nil {
+	var events []agent.Event
+	tc := &agent.TurnContext{Session: sess, Emit: func(e agent.Event) { events = append(events, e) }}
+	if _, err := narratorTool().Handler(context.Background(), tc, json.RawMessage(`{"text":"灰烬落在你肩上。"}`)); err != nil {
 		t.Fatal(err)
 	}
-	if got == nil || got.Location != "灰烬堡" || got.Time != "黄昏" {
-		t.Fatalf("bad scene event: %+v", got)
+	if len(sess.Messages) != 1 {
+		t.Fatalf("want 1 message, got %d", len(sess.Messages))
 	}
-	if sess.Scene.Location != "灰烬堡" {
-		t.Fatalf("session scene not updated: %+v", sess.Scene)
+	m := sess.Messages[0]
+	if m.Kind != store.KindNarration || m.Speaker != "Narrator" || m.Text != "灰烬落在你肩上。" {
+		t.Fatalf("bad narration: %+v", m)
 	}
-	if len(sess.Messages) != 1 || sess.Messages[0].Kind != store.KindScene {
-		t.Fatalf("expected a scene message, got %+v", sess.Messages)
+	if !tc.PlayerFacing {
+		t.Fatal("narration should count as player facing")
+	}
+	if len(events) != 1 || events[0].Type != agent.EventMessage {
+		t.Fatalf("expected one message event, got %+v", events)
+	}
+	if _, err := narratorTool().Handler(context.Background(), tc, json.RawMessage(`{"text":"   "}`)); err == nil {
+		t.Fatal("expected an error for empty text")
 	}
 }
 

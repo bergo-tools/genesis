@@ -13,7 +13,6 @@ const (
 	EventStatus      = "status"
 	EventMessage     = "message"
 	EventState       = "state"
-	EventScene       = "scene"
 	EventChoices     = "choices"
 	EventToolStart   = "tool_start"
 	EventToolEnd     = "tool_end"
@@ -44,7 +43,6 @@ type Event struct {
 	Title   string            `json:"title,omitempty"`
 	Message *store.Message    `json:"message,omitempty"`
 	State   map[string]any    `json:"state,omitempty"`
-	Scene   *store.Scene      `json:"scene,omitempty"`
 	Choices []store.Choice    `json:"choices,omitempty"`
 	Prompt  string            `json:"prompt,omitempty"`
 	Tool    *ToolEvent        `json:"tool,omitempty"`
@@ -89,8 +87,7 @@ func (tc *TurnContext) Show(m *store.Message) {
 	if tc.Emit != nil {
 		tc.Emit(Event{Type: EventMessage, Step: tc.Step, Message: m})
 	}
-	if m != nil && m.Role == "assistant" && m.Text != "" &&
-		m.Kind != store.KindThought && m.Kind != store.KindScene {
+	if m != nil && m.Role == "assistant" && m.Text != "" && m.Kind != store.KindThought {
 		tc.PlayerFacing = true
 	}
 }

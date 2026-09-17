@@ -20,7 +20,6 @@ type storyInput struct {
 	Characters  []characterInput `json:"characters"`
 	Settings    *contentSettings `json:"settings"`
 	State       map[string]any   `json:"state"`
-	Scene       *store.Scene     `json:"scene"`
 }
 
 func applyStoryInput(st *store.Story, in *storyInput) {
@@ -56,9 +55,6 @@ func applyStoryInput(st *store.Story, in *storyInput) {
 	}
 	if in.State != nil {
 		st.State = in.State
-	}
-	if in.Scene != nil {
-		st.Scene = *in.Scene
 	}
 	applyContentSettings(&st.Settings, in.Settings)
 }

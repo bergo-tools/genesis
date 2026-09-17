@@ -45,7 +45,7 @@ function messageImages(message, session) {
 export function Message({ message, session, onSpeak, speaking, action, onReroll, onEdit, busy }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(message.text || '');
-  const speakable = Boolean(message.text) && message.kind !== 'scene';
+  const speakable = Boolean(message.text);
   const canEdit = Boolean(action && action.editable);
   const canReroll = Boolean(action && action.rerollFrom);
   const hasActions = speakable || canEdit || canReroll;
@@ -134,8 +134,8 @@ export function MessageList({ session, streaming, onNewStory, onSpeak, speakingI
       <section class="messages" ref=${ref}>
         <div class="empty">
           <h2>Begin a story</h2>
-          <p>Genesis is an agentic game master. Every beat is a tool call: the cast speaks and thinks
-             with message, sets the scene with scene, and hands you the next branches with choices.</p>
+          <p>Genesis is an agentic game master. Every beat is a tool call: characters speak and think
+             with message, the world is painted with narrator, and the next branches arrive through choices.</p>
           <p><button class="btn btn-primary" type="button" onClick=${onNewStory}>Create your first story</button></p>
         </div>
       </section>`;
@@ -143,34 +143,6 @@ export function MessageList({ session, streaming, onNewStory, onSpeak, speakingI
   return html`
     <section class="messages" ref=${ref}>
       ${messages.map((m) => html`<${Message} key=${m.id} message=${m} session=${session} onSpeak=${onSpeak} speaking=${speakingId === m.id} action=${actions[m.id]} onReroll=${onReroll} onEdit=${onEdit} busy=${busy} />`)}
-    </section>`;
-}
-
-// sceneFields lists the non-empty rows of a scene. The top bar and the world
-// panel share it, so hiding the bar never loses the information.
-function sceneFields(scene) {
-  const s = scene || {};
-  return [
-    ['📍', 'Location', s.location],
-    ['🕓', 'Time', s.time],
-    ['☁', 'Weather', s.weather],
-    ['🎬', 'Background', s.background],
-  ].filter(([, , value]) => value && String(value).trim());
-}
-
-// SceneBar is the strip under the top bar. It can be hidden from its own
-// button or from the Scene section of the world panel.
-export function SceneBar({ scene, open, onToggle }) {
-  const s = scene || {};
-  const fields = sceneFields(s);
-  const notes = (s.notes || '').trim();
-  if (!open || (!fields.length && !notes)) return null;
-  return html`
-    <section class="scene-bar">
-      ${fields.map(([icon, label, value]) => html`<span key=${label}>${icon} <b>${value}</b></span>`)}
-      ${notes && html`<span class="muted">${notes}</span>`}
-      <button class="scene-hide" type="button" aria-label="Hide the scene bar"
-              title="Hide the scene bar" onClick=${onToggle}>▴</button>
     </section>`;
 }
 
@@ -371,11 +343,8 @@ export function Topbar({ session, models, model, onMenu, onPanel }) {
     </header>`;
 }
 
-export function Panel({ session, activity, open, models, model, sceneBar, onToggleSceneBar, onClose, onEditCast }) {
+export function Panel({ session, activity, open, models, model, onClose, onEditCast }) {
   const chars = (session && session.characters) || [];
-  const scene = (session && session.scene) || {};
-  const sceneRows = sceneFields(scene);
-  const sceneNotes = (scene.notes || '').trim();
   return html`
     <aside class=${'panel' + (open ? ' open' : '')} aria-label="World state">
       <div class="panel-head">
@@ -384,21 +353,6 @@ export function Panel({ session, activity, open, models, model, sceneBar, onTogg
       </div>
       <div class="panel-body">
         <${TokenPanel} session=${session} models=${models} model=${model} />
-        <section class="panel-section">
-          <div class="panel-head" style="padding:0;border:none">
-            <h3 style="margin:0">Scene</h3>
-            <label class="switch" title="Show the scene strip under the top bar">
-              <input type="checkbox" checked=${!!sceneBar} onChange=${onToggleSceneBar} /> Top bar
-            </label>
-          </div>
-          ${sceneRows.length
-            ? html`<div class="scene-fields">
-                ${sceneRows.map(([icon, label, value]) => html`
-                  <div class="scene-field" key=${label}><span>${icon} ${label}</span><b>${value}</b></div>`)}
-              </div>`
-            : html`<p class="muted">Nothing set yet.</p>`}
-          ${sceneNotes && html`<p class="hint">${sceneNotes}</p>`}
-        </section>
         <section class="panel-section">
           <div class="panel-head" style="padding:0;border:none">
             <h3 style="margin:0">Cast</h3>

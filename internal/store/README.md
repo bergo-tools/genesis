@@ -3,7 +3,7 @@
 数据模型与持久化。一个记录一个目录，方便整体备份和删除。
 
 - `model.go`：`Session`（一次对话）、`Story`（可复用预设），以及 `Settings`（预设与会话唯一
-  的设置项：故事指令；模型与生成参数在 `internal/config`）、`Character`、`Message`、`Scene`、
+  的设置项：故事指令；模型与生成参数在 `internal/config`）、`Character`、`Message`、
   `Choice`、`TokenStats`、`TurnSnapshot`。
 - `store.go`：
   - 布局：`stories/<id>/story.json + assets/`、`sessions/<id>/session.json + assets/`；

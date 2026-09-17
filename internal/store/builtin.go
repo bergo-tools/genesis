@@ -65,23 +65,15 @@ func emberfallStory() *Story {
 		},
 		Settings: Settings{
 			SystemPrompt: "这是一场黑暗中世纪奇幻冒险。魔法罕见、危险，且正在苏醒。" +
-				"让施法有代价、让誓言与承诺被记住、让后果真实。用 scene 记录地点与环境，" +
+				"让施法有代价、让誓言与承诺被记住、让后果真实。用 narrator 铺陈环境与情节，" +
 				"控制节奏：每回合推进一个场景节拍，然后给玩家选择。",
-		},
-		Scene: Scene{
-			Location:   "雾中的官道，距灰烬堡三日路程",
-			Time:       "黄昏",
-			Weather:    "低垂的灰雾，空气里有铁锈味",
-			Background: "路旁界石上的守焰纹章正一寸寸剥落。",
 		},
 		State: map[string]any{
 			"kingdom": "灰烬堡",
 			"ward":    "正在熄灭",
 			"magic":   "正在苏醒",
-			"scene": map[string]any{
-				"location": "雾中的官道，距灰烬堡三日路程",
-				"time":     "黄昏",
-			},
+			"place":   "雾中的官道，距灰烬堡三日路程",
+			"time":    "黄昏",
 			"player": map[string]any{
 				"grimoire": "残缺的咒典",
 				"coin":     7,

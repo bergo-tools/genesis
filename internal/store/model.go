@@ -26,7 +26,6 @@ type Session struct {
 	Characters []*Character   `json:"characters"`
 	Messages   []*Message     `json:"messages"`
 	State      map[string]any `json:"state,omitempty"`
-	Scene      Scene          `json:"scene,omitempty"`
 	// Tokens records how much of the model's context window this session uses.
 	Tokens TokenStats `json:"tokens,omitempty"`
 	// PendingChoices holds the branches offered by the last choices call so
@@ -54,7 +53,6 @@ type Story struct {
 	Characters  []*Character   `json:"characters"`
 	Settings    Settings       `json:"settings"`
 	State       map[string]any `json:"state,omitempty"`
-	Scene       Scene          `json:"scene,omitempty"`
 	Builtin     bool           `json:"builtin,omitempty"`
 	CreatedAt   time.Time      `json:"createdAt"`
 	UpdatedAt   time.Time      `json:"updatedAt"`
@@ -85,15 +83,6 @@ type Character struct {
 	CreatedAt   time.Time `json:"createdAt"`
 }
 
-// Scene describes where the story currently is.
-type Scene struct {
-	Location   string `json:"location,omitempty"`
-	Time       string `json:"time,omitempty"`
-	Weather    string `json:"weather,omitempty"`
-	Background string `json:"background,omitempty"`
-	Notes      string `json:"notes,omitempty"`
-}
-
 // Message kinds rendered by the UI.
 const (
 	KindUser      = "user"
@@ -102,7 +91,6 @@ const (
 	KindNarration = "narration"
 	KindThought   = "thought"
 	KindPrompt    = "prompt"
-	KindScene     = "scene"
 	KindSystem    = "system"
 )
 
@@ -121,13 +109,12 @@ type Message struct {
 	Images    []string  `json:"images,omitempty"`
 	CreatedAt time.Time `json:"createdAt"`
 	// Snapshot is the world as it was before this user turn ran. A re-roll or
-	// edit restores it so the scene cannot drift out of sync with the messages.
+	// edit restores it so state cannot drift out of sync with the messages.
 	Snapshot *TurnSnapshot `json:"snapshot,omitempty"`
 }
 
-// TurnSnapshot captures the mutable world state a turn may change.
+// TurnSnapshot captures the world state a turn may change.
 type TurnSnapshot struct {
-	Scene Scene          `json:"scene,omitempty"`
 	State map[string]any `json:"state,omitempty"`
 }
 

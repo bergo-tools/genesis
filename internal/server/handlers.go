@@ -288,7 +288,6 @@ type turnBackup struct {
 	History  []llm.Message
 	Choices  []store.Choice
 	Prompt   string
-	Scene    store.Scene
 	State    map[string]any
 }
 
@@ -301,7 +300,6 @@ func snapshotTurn(sess *store.Session) *turnBackup {
 		History:  append([]llm.Message(nil), sess.History...),
 		Choices:  append([]store.Choice(nil), sess.PendingChoices...),
 		Prompt:   sess.PendingPrompt,
-		Scene:    sess.Scene,
 		State:    cloneState(sess.State),
 	}
 }
@@ -314,7 +312,6 @@ func (b *turnBackup) restore(sess *store.Session) {
 	sess.History = b.History
 	sess.PendingChoices = b.Choices
 	sess.PendingPrompt = b.Prompt
-	sess.Scene = b.Scene
 	sess.State = b.State
 }
 
@@ -357,7 +354,6 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 		sess.StoryID = st.ID
 		sess.StoryTitle = st.Title
 		sess.Avatar = st.Avatar
-		sess.Scene = st.Scene
 		sess.Persona = st.Persona
 		sess.Settings.SystemPrompt = strings.TrimSpace(st.Settings.SystemPrompt)
 		sess.Characters = cloneCharacters(st.Characters)
@@ -512,7 +508,7 @@ func (s *Server) handleMessage(w http.ResponseWriter, r *http.Request) {
 		ID: store.NewID(), Role: "user", Kind: store.KindUser,
 		Speaker: sess.Persona.Name, Text: text, OOC: ooc, Images: images, CreatedAt: time.Now().UTC(),
 		// Remember the world before this turn so a re-roll can restore it.
-		Snapshot: &store.TurnSnapshot{Scene: sess.Scene, State: cloneState(sess.State)},
+		Snapshot: &store.TurnSnapshot{State: cloneState(sess.State)},
 	}
 	sess.Messages = append(sess.Messages, user)
 	sess.History = append(sess.History, llm.Message{
@@ -777,7 +773,6 @@ func truncateFromUser(sess *store.Session, msgID string) bool {
 		return false
 	}
 	if snap := sess.Messages[mi].Snapshot; snap != nil {
-		sess.Scene = snap.Scene
 		sess.State = cloneState(snap.State)
 	}
 	sess.Messages = sess.Messages[:mi+1]

@@ -83,10 +83,10 @@ func TestPutConfigPersistsSpeechFields(t *testing.T) {
 // PUT /api/config, so disabledTools must be parsed there.
 func TestPutConfigPersistsDisabledTools(t *testing.T) {
 	srv, cfg := newTestServer(t)
-	if rec := putConfig(t, srv, `{"disabledTools":["scene","scene"," "]}`); rec.Code != http.StatusOK {
+	if rec := putConfig(t, srv, `{"disabledTools":["narrator","narrator"," "]}`); rec.Code != http.StatusOK {
 		t.Fatalf("PUT /api/config = %d: %s", rec.Code, rec.Body.String())
 	}
-	if got := cfg.Get().DisabledTools; len(got) != 1 || got[0] != "scene" {
+	if got := cfg.Get().DisabledTools; len(got) != 1 || got[0] != "narrator" {
 		t.Fatalf("disabledTools not persisted/cleaned: %#v", got)
 	}
 	// An explicitly empty list must clear them.

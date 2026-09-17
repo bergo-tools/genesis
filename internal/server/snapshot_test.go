@@ -7,13 +7,10 @@ import (
 	"github.com/zp/genesis/internal/store"
 )
 
-// A re-roll must put the scene and world state back the way they were before
-// the turn ran, otherwise the scene bar drifts out of sync with the messages.
+// A re-roll must put the world state back the way it was before the turn ran,
+// otherwise the world panel drifts out of sync with the messages.
 func TestTruncateFromUserRestoresSnapshot(t *testing.T) {
-	snap := &store.TurnSnapshot{
-		Scene: store.Scene{Location: "Harbour", Time: "dusk"},
-		State: map[string]any{"gold": 3},
-	}
+	snap := &store.TurnSnapshot{State: map[string]any{"gold": 3}}
 	sess := &store.Session{
 		Messages: []*store.Message{
 			{ID: "u1", Role: "user", Kind: store.KindUser, Text: "a", Snapshot: snap},
@@ -24,15 +21,11 @@ func TestTruncateFromUserRestoresSnapshot(t *testing.T) {
 			{Role: llm.RoleUser, Content: "a", Ref: "u1"},
 			{Role: llm.RoleUser, Content: "b", Ref: "u2"},
 		},
-		// The scene drifted after the turn ran.
-		Scene: store.Scene{Location: "Palace", Time: "midnight"},
+		// The world drifted after the turn ran.
 		State: map[string]any{"gold": 99},
 	}
 	if !truncateFromUser(sess, "u1") {
 		t.Fatal("truncateFromUser should succeed")
-	}
-	if sess.Scene.Location != "Harbour" || sess.Scene.Time != "dusk" {
-		t.Fatalf("scene not restored: %+v", sess.Scene)
 	}
 	if gold, ok := sess.State["gold"].(float64); !ok || gold != 3 {
 		t.Fatalf("state not restored: %+v", sess.State)
@@ -46,7 +39,6 @@ func TestTurnBackupRestore(t *testing.T) {
 		History:        []llm.Message{{Role: llm.RoleUser, Content: "one"}},
 		PendingChoices: []store.Choice{{Text: "x"}},
 		PendingPrompt:  "p",
-		Scene:          store.Scene{Location: "Harbour"},
 		State:          map[string]any{"gold": 3},
 	}
 	backup := snapshotTurn(sess)
@@ -55,7 +47,6 @@ func TestTurnBackupRestore(t *testing.T) {
 	sess.History = append(sess.History, llm.Message{Role: llm.RoleAssistant, Content: "new"})
 	sess.PendingChoices = nil
 	sess.PendingPrompt = ""
-	sess.Scene = store.Scene{Location: "Palace"}
 	sess.State["gold"] = 99
 	backup.restore(sess)
 	if len(sess.Messages) != 1 || sess.Messages[0].ID != "u1" {
@@ -66,9 +57,6 @@ func TestTurnBackupRestore(t *testing.T) {
 	}
 	if len(sess.PendingChoices) != 1 || sess.PendingPrompt != "p" {
 		t.Fatalf("choices not restored: %+v %q", sess.PendingChoices, sess.PendingPrompt)
-	}
-	if sess.Scene.Location != "Harbour" {
-		t.Fatalf("scene not restored: %+v", sess.Scene)
 	}
 	if gold, ok := sess.State["gold"].(float64); !ok || gold != 3 {
 		t.Fatalf("state not restored: %+v", sess.State)
