@@ -64,13 +64,17 @@ function messageImages(message, session) {
   return message.localImages || [];
 }
 
-export function Message({ message, session, onSpeak, speaking, action, onReroll, onEdit, busy, grouped }) {
+export function Message({ message, session, onSpeak, speaking, action, onReroll, onEdit, busy, grouped, last, speakText }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(message.text || '');
-  const speakable = Boolean(message.text);
+  // Reading aloud reads the whole run, not one fragment of it. The action row
+  // only appears on the last beat of a run, so a multi-call beat does not sprout
+  // a speaker button between every line.
+  const spoken = speakText || message.text || '';
+  const speakable = Boolean(spoken);
   const canEdit = Boolean(action && action.editable);
   const canReroll = Boolean(action && action.rerollFrom);
-  const hasActions = speakable || canEdit || canReroll;
+  const hasActions = (last !== false) && (speakable || canEdit || canReroll);
   const startEdit = () => {
     setDraft(message.text || '');
     setEditing(true);
@@ -125,7 +129,7 @@ export function Message({ message, session, onSpeak, speaking, action, onReroll,
               ${speakable && html`
                 <button class=${'speak-btn' + (speaking ? ' active' : '')} type="button"
                         title=${speaking ? 'Stop' : 'Read aloud'}
-                        onClick=${() => onSpeak && onSpeak(message)}>${speaking ? '⏹' : '🔊'}</button>`}
+                        onClick=${() => onSpeak && onSpeak(Object.assign({}, message, { text: spoken }))}>${speaking ? '⏹' : '🔊'}</button>`}
               ${canEdit && html`
                 <button class="speak-btn" type="button" title="Edit and rerun from here" onClick=${startEdit}>✎</button>`}
               ${canReroll && html`
@@ -155,16 +159,25 @@ export function MessageList({ session, streaming, onNewStory, onSpeak, speakingI
   // Consecutive beats from the same speaker are one visual block: only the
   // first shows an avatar and the speaker's name.
   const grouped = {};
-  let previousKey = null;
-  for (const m of messages) {
-    // A message with no speaker gets a key of its own. Falling back to the kind
-    // would let two unrelated beats merge, hiding the second one's name and
-    // avatar so it reads as a continuation of the first.
-    const key = m.role === 'user'
-      ? 'user:' + m.id
-      : (m.speaker ? 'assistant:' + String(m.speaker).toLowerCase() : 'unowned:' + m.id);
-    grouped[m.id] = previousKey === key;
-    previousKey = key;
+  const last = {};
+  const speakText = {};
+  // A message with no speaker gets a key of its own. Falling back to the kind
+  // would let two unrelated beats merge, hiding the second one's name and
+  // avatar so it reads as a continuation of the first.
+  const keyOf = (m) => (m.role === 'user'
+    ? 'user:' + m.id
+    : (m.speaker ? 'assistant:' + String(m.speaker).toLowerCase() : 'unowned:' + m.id));
+  for (let i = 0; i < messages.length; ) {
+    const key = keyOf(messages[i]);
+    let j = i + 1;
+    while (j < messages.length && keyOf(messages[j]) === key) j++;
+    const text = messages.slice(i, j).map((m) => m.text || '').filter(Boolean).join('\n\n');
+    for (let k = i; k < j; k++) {
+      grouped[messages[k].id] = k > i;
+      last[messages[k].id] = k === j - 1;
+      speakText[messages[k].id] = text;
+    }
+    i = j;
   }
   useEffect(() => {
     const el = ref.current;
@@ -185,7 +198,7 @@ export function MessageList({ session, streaming, onNewStory, onSpeak, speakingI
   }
   return html`
     <section class="messages" ref=${ref}>
-      ${messages.map((m) => html`<${Message} key=${m.id} message=${m} session=${session} onSpeak=${onSpeak} speaking=${speakingId === m.id} action=${actions[m.id]} onReroll=${onReroll} onEdit=${onEdit} busy=${busy} grouped=${grouped[m.id]} />`)}
+      ${messages.map((m) => html`<${Message} key=${m.id} message=${m} session=${session} onSpeak=${onSpeak} speaking=${speakingId === m.id} action=${actions[m.id]} onReroll=${onReroll} onEdit=${onEdit} busy=${busy} grouped=${grouped[m.id]} last=${last[m.id]} speakText=${speakText[m.id]} />`)}
     </section>`;
 }
 

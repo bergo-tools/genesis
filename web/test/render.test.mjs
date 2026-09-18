@@ -134,6 +134,19 @@ if (x2Open.includes('grouped')) {
   process.exit(1);
 }
 
+// A repeated speaker is one run: the action row (and its speaker button) must
+// appear once at the end of the run, not between every beat.
+const actionsCount = (chat.match(/class="msg-actions"/g) || []).length;
+if (actionsCount !== 7) {
+  console.error('expected 7 action rows, got ' + actionsCount);
+  process.exit(1);
+}
+const a1Slice = chat.slice(chat.indexOf('data-id="a1"'), chat.indexOf('data-id="a2"'));
+if (a1Slice.includes('msg-actions')) {
+  console.error('a mid-run beat must not carry its own action row');
+  process.exit(1);
+}
+
 const total = check('MessageList', chat, ['hello there', 'well met', '✎', '↻', 'The fog thickens.', 'She steps closer.', 'msg assistant action grouped', 'choice-tag', 'msg user from-choice', 'Draw the blade', 'class="block"', 'class="thought-inline"', 'class="msg assistant"'])
   + check('App', app, ['Genesis', 'Begin a story', 'Create a story to start…', 'agentic roleplay', 'Generate a preset from a description'])
   + check('SettingsModal', settings, ['tool-toggles', 'toggle-row', 'picker-trigger', '<select'])
