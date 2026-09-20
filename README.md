@@ -7,9 +7,9 @@
 
 ## 功能
 
-- **一切皆工具调用**：内置 `writing_block`（一个角色的一个节拍，`blocks` 是 `text` / `thought`
-  的有序列表，内心想法可以插在两句对白之间）、`narrator`（环境 / 氛围 / 情节推进）、
-  `choices`（回合末尾给出 2–4 个选项）三个工具，全部带 `last_call`；工具开关是全局的，
+- **一切皆工具调用**：内置 `writing_block`（一个角色或世界的一个节拍，`blocks` 是 `text` / `thought`
+  的有序列表，内心想法可以插在两句对白之间；`speaker` 写 Narrator 就是环境 / 氛围 / 情节推进）、
+  `choices`（回合末尾给出 2–4 个选项）两个工具，全部带 `last_call`；工具开关是全局的，
   禁用的工具绝不会执行。
 - **Story 预设 + Session 会话**：预设是可复用模板（cast、开场、故事指令、种子状态）；
   模型与生成参数只有一份，放在全局 Settings 里，改完全部会话（含进行中的）下一回合即生效；
@@ -18,7 +18,7 @@
   直接填进下面的表单；不点 Save 不会落盘。侧栏 `New story` 旁边的 ✨ 随时开一个空白预设来生成。
 - **多角色 cast**：每个角色有名字、描述、头像与 TTS 音色。
 - **点选 vs 手打**：回合末尾的 `choices` 是左右翻的选项卡片。点选出来的玩家消息带 `choice` 徽章、
-  边框样式也不同；模型会收到 `[choice]` 标记，于是 `narrator` 会先把这一步的实际效果展开描写
+  边框样式也不同；模型会收到 `[choice]` 标记，于是 Narrator 会先把这一步的实际效果展开描写
   （选了「施放咒术」，就先写咒术具体发生了什么），再让角色反应。手打的回复不带这个标记。
 - **图片**：预设 / 会话头像、角色头像、聊天配图；聊天图片作为多模态输入发给模型。
 - **按回合重 roll / 编辑**：每个 AI 回合末尾有 ↻（先确认），用户消息可 ✎ 编辑并重跑；
@@ -42,7 +42,7 @@
 | `internal/llm/` | provider 中立的 Chat 类型 + OpenRouter 适配 + TTS |
 | `internal/store/` | 数据模型、按目录持久化、资源与摘要缓存 |
 | `internal/agent/` | 工具注册表、agent 循环、事件、system prompt |
-| `internal/tools/` | writing_block / narrator / choices 三个内置工具 |
+| `internal/tools/` | writing_block / choices 两个内置工具 |
 | `internal/server/` | HTTP 路由、NDJSON 流、鉴权中间件 |
 | `web/` | Preact + htm 前端（无构建，`go:embed` 打包） |
 

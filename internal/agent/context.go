@@ -90,17 +90,3 @@ func (tc *TurnContext) Show(m *store.Message) {
 		tc.PlayerFacing = true
 	}
 }
-
-// PrimaryName returns the lead character's name or a sensible fallback.
-func (tc *TurnContext) PrimaryName() string {
-	return narratorName(tc.Session)
-}
-
-func narratorName(sess *store.Session) string {
-	if sess != nil {
-		if c := sess.PrimaryCharacter(); c != nil && c.Name != "" {
-			return c.Name
-		}
-	}
-	return "Narrator"
-}

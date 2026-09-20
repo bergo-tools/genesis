@@ -546,8 +546,8 @@ func (s *Server) handleOpening(w http.ResponseWriter, r *http.Request) {
 	}
 	sess.History = append(sess.History, llm.Message{
 		Role: llm.RoleUser,
-		Content: "[system] Begin the story now. Establish the scene with narrator, give the cast " +
-			"something to react to, then finish with the choices tool.",
+		Content: "[system] Begin the story now. Establish the scene with a speaker Narrator " +
+			"writing_block, give the cast something to react to, then finish with the choices tool.",
 	})
 	if err := s.store.Save(sess); err != nil {
 		writeError(w, http.StatusInternalServerError, err)

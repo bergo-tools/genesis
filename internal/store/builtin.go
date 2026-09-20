@@ -65,7 +65,7 @@ func emberfallStory() *Story {
 		},
 		Settings: Settings{
 			SystemPrompt: "这是一场黑暗中世纪奇幻冒险。魔法罕见、危险，且正在苏醒。" +
-				"让施法有代价、让誓言与承诺被记住、让后果真实。用 narrator 铺陈环境与情节，" +
+				"让施法有代价、让誓言与承诺被记住、让后果真实。用 speaker 为 Narrator 的 writing_block 铺陈环境与情节，" +
 				"控制节奏：每回合推进一个场景节拍，然后给玩家选择。",
 		},
 		State: map[string]any{
