@@ -139,15 +139,10 @@ func (a *Agent) Continue(ctx context.Context, sess *store.Session, emit func(Eve
 
 		if len(resp.ToolCalls) == 0 {
 			if txt := strings.TrimSpace(resp.Content); txt != "" {
-				// The model answered with prose instead of a tool call. It is
-				// unowned, so it must not borrow the first character's name and
-				// avatar: attribute it to the narrator.
-				tc.Show(&store.Message{
-					Role:    llm.RoleAssistant,
-					Kind:    store.KindNarration,
-					Speaker: "Narrator",
-					Text:    txt,
-				})
+				// The model answered with prose instead of a tool call. Every beat
+				// must belong to a cast member and there is no way to know whose
+				// this is, so keep it in the transcript for the model and let the
+				// reminder below nudge it back to the tools.
 				sess.History = append(sess.History, llm.Message{Role: llm.RoleAssistant, Content: resp.Content})
 			}
 			turnPlayerFacing = turnPlayerFacing || tc.PlayerFacing

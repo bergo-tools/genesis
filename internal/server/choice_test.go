@@ -26,7 +26,7 @@ func TestTurnContentMarksChoices(t *testing.T) {
 	}
 }
 
-// Editing a choice keeps the marker, so a re-run still tells the narrator to
+// Editing a choice keeps the marker, so a re-run still tells the model to
 // expand the action instead of treating it as prose the player typed.
 func TestSetUserMessageTextKeepsChoiceMark(t *testing.T) {
 	sess := &store.Session{

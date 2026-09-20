@@ -51,7 +51,6 @@ const chat = renderToString(h(MessageList, {
     id: 's1',
     messages: [
       { id: 'u1', role: 'user', kind: 'user', text: 'hello there' },
-      { id: 'n1', role: 'assistant', kind: 'narration', speaker: 'Narrator', text: 'The fog thickens.' },
       { id: 'a1', role: 'assistant', kind: 'speech', speaker: 'Ilyra', text: 'well met' },
       { id: 'a2', role: 'assistant', kind: 'action', speaker: 'Ilyra', text: 'She steps closer.' },
       { id: 'u2', role: 'user', kind: 'user', text: 'Draw the blade', choice: true },
@@ -105,13 +104,7 @@ const choices = renderToString(h(Choices, {
   onChoose: () => {},
 }));
 
-// The narrator block must carry no avatar, and a repeated Ilyra beat must be
-// grouped with the one before it.
-const narratorBlock = chat.slice(chat.indexOf('data-id="n1"'), chat.indexOf('data-id="a1"'));
-if (narratorBlock.includes('class="avatar"')) {
-  console.error('Narrator must render without an avatar');
-  process.exit(1);
-}
+// A repeated Ilyra beat must be grouped with the one before it.
 const avatarCount = (chat.match(/class="avatar"/g) || []).length;
 if (avatarCount !== 7) {
   console.error('expected 7 avatars (two user turns + three Ilyra beats + two unowned), got ' + avatarCount);
@@ -137,8 +130,8 @@ if (x2Open.includes('grouped')) {
 // A repeated speaker is one run: the action row (and its speaker button) must
 // appear once at the end of the run, not between every beat.
 const actionsCount = (chat.match(/class="msg-actions"/g) || []).length;
-if (actionsCount !== 7) {
-  console.error('expected 7 action rows, got ' + actionsCount);
+if (actionsCount !== 6) {
+  console.error('expected 6 action rows, got ' + actionsCount);
   process.exit(1);
 }
 const a1Slice = chat.slice(chat.indexOf('data-id="a1"'), chat.indexOf('data-id="a2"'));
@@ -147,7 +140,7 @@ if (a1Slice.includes('msg-actions')) {
   process.exit(1);
 }
 
-const total = check('MessageList', chat, ['hello there', 'well met', '✎', '↻', 'The fog thickens.', 'She steps closer.', 'msg assistant action grouped', 'choice-tag', 'msg user from-choice', 'Draw the blade', 'class="block"', 'class="thought-inline"', 'class="msg assistant"'])
+const total = check('MessageList', chat, ['hello there', 'well met', '✎', '↻', 'She steps closer.', 'msg assistant action grouped', 'choice-tag', 'msg user from-choice', 'Draw the blade', 'class="block"', 'class="thought-inline"', 'class="msg assistant"'])
   + check('App', app, ['Genesis', 'Begin a story', 'Create a story to start…', 'agentic roleplay', 'Generate a preset from a description'])
   + check('SettingsModal', settings, ['tool-toggles', 'toggle-row', 'picker-trigger', '<select'])
   + check('StoryModal', sessionSettings, ['Story settings', 'Story instructions', '+ Add character', 'picker-trigger', 'field-tag', 'marks what the model actually reads'])

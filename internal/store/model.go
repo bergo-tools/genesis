@@ -31,7 +31,6 @@ type Session struct {
 	// PendingChoices holds the branches offered by the last choices call so
 	// they survive a page reload. They are cleared when the player replies.
 	PendingChoices []Choice `json:"pendingChoices,omitempty"`
-	PendingPrompt  string   `json:"pendingPrompt,omitempty"`
 
 	// History is the model-facing transcript. The system prompt is rebuilt on
 	// every turn and is therefore not stored here. Image entries keep only the
@@ -97,13 +96,12 @@ type Block struct {
 
 // Message kinds rendered by the UI.
 const (
-	KindUser      = "user"
-	KindSpeech    = "speech"
-	KindAction    = "action"
-	KindNarration = "narration"
-	KindThought   = "thought"
-	KindPrompt    = "prompt"
-	KindSystem    = "system"
+	KindUser    = "user"
+	KindSpeech  = "speech"
+	KindAction  = "action"
+	KindThought = "thought"
+	KindPrompt  = "prompt"
+	KindSystem  = "system"
 )
 
 // Message is one displayable event in the chat.
@@ -123,8 +121,8 @@ type Message struct {
 	// Thought is only set by sessions recorded before blocks existed.
 	Blocks []Block `json:"blocks,omitempty"`
 	// Choice marks a player turn that came from tapping one of the offered
-	// branches instead of typing. The model is told, so the narrator can expand
-	// on what the choice actually does.
+	// branches instead of typing. The model is told, so the cast can react to
+	// what the choice actually does.
 	Choice    bool      `json:"choice,omitempty"`
 	CreatedAt time.Time `json:"createdAt"`
 	// Snapshot is the world as it was before this user turn ran. A re-roll or
@@ -138,7 +136,7 @@ type TurnSnapshot struct {
 }
 
 // Choice is one branch offered to the player. It is a short label only; the
-// model explains the branches in the narration, not in the option text.
+// model explains the branches in its beats, not in the option text.
 type Choice struct {
 	Text string `json:"text"`
 }

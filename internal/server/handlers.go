@@ -285,7 +285,6 @@ type turnBackup struct {
 	Messages []*store.Message
 	History  []llm.Message
 	Choices  []store.Choice
-	Prompt   string
 	State    map[string]any
 }
 
@@ -297,7 +296,6 @@ func snapshotTurn(sess *store.Session) *turnBackup {
 		Messages: append([]*store.Message(nil), sess.Messages...),
 		History:  append([]llm.Message(nil), sess.History...),
 		Choices:  append([]store.Choice(nil), sess.PendingChoices...),
-		Prompt:   sess.PendingPrompt,
 		State:    cloneState(sess.State),
 	}
 }
@@ -309,7 +307,6 @@ func (b *turnBackup) restore(sess *store.Session) {
 	sess.Messages = b.Messages
 	sess.History = b.History
 	sess.PendingChoices = b.Choices
-	sess.PendingPrompt = b.Prompt
 	sess.State = b.State
 }
 
@@ -377,14 +374,15 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 	applyContentSettings(&sess.Settings, body.Settings)
 
 	if opening != "" {
-		speaker := "Narrator"
-		if len(sess.Characters) > 0 {
-			speaker = sess.Characters[0].Name
+		// Every beat belongs to a cast member, so the scripted opening is shown
+		// as the first character's line. A preset with no cast has nowhere to put
+		// it; it still seeds the transcript so the story starts from it.
+		if c := sess.PrimaryCharacter(); c != nil && c.Name != "" {
+			sess.Messages = append(sess.Messages, &store.Message{
+				ID: store.NewID(), Role: "assistant", Kind: store.KindSpeech,
+				Speaker: c.Name, Text: opening, CreatedAt: time.Now().UTC(),
+			})
 		}
-		sess.Messages = append(sess.Messages, &store.Message{
-			ID: store.NewID(), Role: "assistant", Kind: store.KindNarration,
-			Speaker: speaker, Text: opening, CreatedAt: time.Now().UTC(),
-		})
 		sess.History = append(sess.History, llm.Message{Role: llm.RoleAssistant, Content: opening})
 	}
 
@@ -519,7 +517,6 @@ func (s *Server) handleMessage(w http.ResponseWriter, r *http.Request) {
 	})
 	// The player answered, so the previous branch offer is spent.
 	sess.PendingChoices = nil
-	sess.PendingPrompt = ""
 
 	title := ""
 	if strings.TrimSpace(sess.Title) == "" {
@@ -546,8 +543,8 @@ func (s *Server) handleOpening(w http.ResponseWriter, r *http.Request) {
 	}
 	sess.History = append(sess.History, llm.Message{
 		Role: llm.RoleUser,
-		Content: "[system] Begin the story now. Establish the scene with a speaker Narrator " +
-			"writing_block, give the cast something to react to, then finish with the choices tool.",
+		Content: "[system] Begin the story now. Give the cast something to react to " +
+			"through writing_block, then finish with the choices tool.",
 	})
 	if err := s.store.Save(sess); err != nil {
 		writeError(w, http.StatusInternalServerError, err)
@@ -814,7 +811,6 @@ func truncateFromUser(sess *store.Session, msgID string) bool {
 		sess.History = nil
 	}
 	sess.PendingChoices = nil
-	sess.PendingPrompt = ""
 	return true
 }
 

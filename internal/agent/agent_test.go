@@ -121,8 +121,8 @@ func TestContinueRunsToolsUntilTerminal(t *testing.T) {
 	}
 }
 
-func TestContinueFallsBackToPlainText(t *testing.T) {
-	client := &fakeClient{responses: []*llm.Response{{Content: "plain narration"}}}
+func TestContinueDiscardsUnattributedPlainText(t *testing.T) {
+	client := &fakeClient{responses: []*llm.Response{{Content: "plain text"}}}
 	a := newTestAgent(t, client)
 	sess := &store.Session{ID: "abc", History: []llm.Message{{Role: llm.RoleUser, Content: "hi"}}}
 	if err := a.store.Create(sess); err != nil {
@@ -131,8 +131,19 @@ func TestContinueFallsBackToPlainText(t *testing.T) {
 	if err := a.Continue(context.Background(), sess, func(Event) {}); err != nil {
 		t.Fatal(err)
 	}
-	if len(sess.Messages) != 1 || sess.Messages[0].Kind != store.KindNarration {
-		t.Fatalf("expected salvaged narration, got %+v", sess.Messages)
+	// A beat must belong to a cast member, so prose with no tool call stays in
+	// the transcript but never becomes someone's line.
+	if len(sess.Messages) != 0 {
+		t.Fatalf("unattributed prose must not become a message: %+v", sess.Messages)
+	}
+	sawReminder := false
+	for _, m := range sess.History {
+		if m.Role == llm.RoleUser && strings.Contains(m.Content, "writing_block") {
+			sawReminder = true
+		}
+	}
+	if !sawReminder {
+		t.Fatalf("the model should be nudged back to the tools: %+v", sess.History)
 	}
 }
 

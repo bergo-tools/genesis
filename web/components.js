@@ -34,11 +34,7 @@ function avatarFor(message, session) {
   const found = chars.find((c) => String(c.name || '').toLowerCase() === speaker);
   if (found && found.avatar && session) return html`<img src=${assetURL(session.id, found.avatar)} alt="" />`;
   if (found && found.name) return initial(found.name);
-  // The narrator is the world's voice, not a cast member: no avatar, so its
-  // lines do not read like one more character speaking.
-  if (speaker === 'narrator') return null;
   switch (message.kind) {
-    case 'narration': return '✦';
     case 'prompt': return '❯';
     case 'thought': return '…';
     default: return '◆';
@@ -90,7 +86,7 @@ export function Message({ message, session, onSpeak, speaking, action, onReroll,
   const speaker = message.speaker || (message.role === 'user'
     ? ((session && session.persona && session.persona.name) || 'You')
     : '');
-  const showSpeaker = speaker && message.kind !== 'narration' && !grouped;
+  const showSpeaker = speaker && !grouped;
   const avatar = avatarFor(message, session);
   const images = messageImages(message, session);
   return html`
@@ -190,8 +186,8 @@ export function MessageList({ session, streaming, onNewStory, onSpeak, speakingI
       <section class="messages" ref=${ref}>
         <div class="empty">
           <h2>Begin a story</h2>
-          <p>Genesis is an agentic game master. Every beat is a tool call: characters speak and think
-             with writing_block, the world is painted by the Narrator, and the next branches arrive through choices.</p>
+          <p>Genesis is an agentic game master. Every beat is a tool call: each character speaks and
+             thinks with writing_block, and the next branches arrive through choices.</p>
           <p><button class="btn btn-primary" type="button" onClick=${onNewStory}>Create your first story</button></p>
         </div>
       </section>`;

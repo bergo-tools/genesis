@@ -21,14 +21,12 @@ func writingBlockTool() *agent.Tool {
 	return &agent.Tool{
 		Name:     "writing_block",
 		Category: "narrative",
-		Description: "One beat of the scene, from one character or from the world. blocks is an " +
-			"ordered list: text blocks are the prose the player reads (dialogue, an action, a " +
-			"description), thought blocks are that character's private inner voice, rendered " +
-			"dimmed. Interleave them to follow the character's mind from line to line. Call it " +
-			"once per character per turn; use speaker Narrator for the world itself, with text " +
-			"blocks only.",
+		Description: "One beat of the scene, from one character. blocks is an ordered list: text " +
+			"blocks are the prose the player reads (dialogue, an action, a description), thought " +
+			"blocks are that character's private inner voice, rendered dimmed. Interleave them to " +
+			"follow the character's mind from line to line. Call it once per character per turn.",
 		Parameters: object(map[string]any{
-			"speaker":   stringProp("Exact character name from the cast, or Narrator for the world."),
+			"speaker":   stringProp("Exact character name from the cast."),
 			"blocks":    arrayProp("This character's beat, in order.", block),
 			"last_call": lastCallProp(),
 		}, "speaker", "blocks"),
@@ -49,21 +47,14 @@ func writingBlockTool() *agent.Tool {
 				return nil, errors.New("blocks is required")
 			}
 			prose := proseOf(blocks)
-			speaker := castName(tc, name)
 			kind := store.KindThought
 			if prose != "" {
 				kind = store.KindSpeech
 			}
-			// The narrator has no separate tool: writing_block with speaker Narrator
-			// paints the world, so its beats render as narration.
-			if strings.EqualFold(speaker, "Narrator") {
-				speaker = "Narrator"
-				kind = store.KindNarration
-			}
 			tc.Show(&store.Message{
 				Role:    "assistant",
 				Kind:    kind,
-				Speaker: speaker,
+				Speaker: castName(tc, name),
 				Blocks:  blocks,
 				Text:    prose,
 			})

@@ -24,7 +24,6 @@ func TestTruncateFromUser(t *testing.T) {
 			{Role: llm.RoleTool, ToolCallID: "t2", Content: "{}"},
 		},
 		PendingChoices: []store.Choice{{Text: "x"}},
-		PendingPrompt:  "p",
 	}
 	if !truncateFromUser(sess, "u1") {
 		t.Fatal("expected truncateFromUser to report success")
@@ -35,7 +34,7 @@ func TestTruncateFromUser(t *testing.T) {
 	if len(sess.History) != 1 || sess.History[0].Ref != "u1" {
 		t.Fatalf("history not truncated: %+v", sess.History)
 	}
-	if len(sess.PendingChoices) != 0 || sess.PendingPrompt != "" {
+	if len(sess.PendingChoices) != 0 {
 		t.Fatal("pending choices should be cleared")
 	}
 	if lastUserMessageID(sess) != "u1" {

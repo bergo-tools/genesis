@@ -38,7 +38,6 @@ func TestTurnBackupRestore(t *testing.T) {
 		Messages:       []*store.Message{{ID: "u1", Text: "one"}},
 		History:        []llm.Message{{Role: llm.RoleUser, Content: "one"}},
 		PendingChoices: []store.Choice{{Text: "x"}},
-		PendingPrompt:  "p",
 		State:          map[string]any{"gold": 3},
 	}
 	backup := snapshotTurn(sess)
@@ -46,7 +45,6 @@ func TestTurnBackupRestore(t *testing.T) {
 	sess.Messages = append(sess.Messages, &store.Message{ID: "n1", Text: "new"})
 	sess.History = append(sess.History, llm.Message{Role: llm.RoleAssistant, Content: "new"})
 	sess.PendingChoices = nil
-	sess.PendingPrompt = ""
 	sess.State["gold"] = 99
 	backup.restore(sess)
 	if len(sess.Messages) != 1 || sess.Messages[0].ID != "u1" {
@@ -55,8 +53,8 @@ func TestTurnBackupRestore(t *testing.T) {
 	if len(sess.History) != 1 || sess.History[0].Content != "one" {
 		t.Fatalf("history not restored: %+v", sess.History)
 	}
-	if len(sess.PendingChoices) != 1 || sess.PendingPrompt != "p" {
-		t.Fatalf("choices not restored: %+v %q", sess.PendingChoices, sess.PendingPrompt)
+	if len(sess.PendingChoices) != 1 {
+		t.Fatalf("choices not restored: %+v", sess.PendingChoices)
 	}
 	if gold, ok := sess.State["gold"].(float64); !ok || gold != 3 {
 		t.Fatalf("state not restored: %+v", sess.State)

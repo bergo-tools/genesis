@@ -120,31 +120,6 @@ func TestWritingBlockMatchesCastName(t *testing.T) {
 	}
 }
 
-// The narrator has no tool of its own: writing_block with speaker Narrator is
-// how the world is described, and those beats must render as narration.
-func TestWritingBlockNarratesForTheWorld(t *testing.T) {
-	sess := &store.Session{}
-	var events []agent.Event
-	tc := &agent.TurnContext{Session: sess, Emit: func(e agent.Event) { events = append(events, e) }}
-	raw := `{"speaker":"narrator","blocks":[{"type":"text","text":"灰烬落在你肩上。"}]}`
-	if _, err := writingBlockTool().Handler(context.Background(), tc, json.RawMessage(raw)); err != nil {
-		t.Fatal(err)
-	}
-	if len(sess.Messages) != 1 {
-		t.Fatalf("want 1 message, got %d", len(sess.Messages))
-	}
-	m := sess.Messages[0]
-	if m.Kind != store.KindNarration || m.Speaker != "Narrator" || m.Text != "灰烬落在你肩上。" {
-		t.Fatalf("bad narration: %+v", m)
-	}
-	if !tc.PlayerFacing {
-		t.Fatal("narration should count as player facing")
-	}
-	if len(events) != 1 || events[0].Type != agent.EventMessage {
-		t.Fatalf("expected one message event, got %+v", events)
-	}
-}
-
 func TestChoicesPersistOnSession(t *testing.T) {
 	if !choicesTool().Terminal {
 		t.Fatal("choices must be terminal")
@@ -152,10 +127,10 @@ func TestChoicesPersistOnSession(t *testing.T) {
 	sess := &store.Session{}
 	tc := &agent.TurnContext{Session: sess, Emit: func(agent.Event) {}}
 	if _, err := choicesTool().Handler(context.Background(), tc, json.RawMessage(
-		`{"narration":"门开了。","choices":[{"text":"进去"},{"text":"等"}]}`)); err != nil {
+		`{"choices":[{"text":"进去"},{"text":"等"}]}`)); err != nil {
 		t.Fatal(err)
 	}
-	if len(sess.PendingChoices) != 2 || sess.PendingPrompt != "门开了。" {
+	if len(sess.PendingChoices) != 2 {
 		t.Fatalf("choices not persisted on the session: %+v", sess.PendingChoices)
 	}
 }

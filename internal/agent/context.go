@@ -43,7 +43,6 @@ type Event struct {
 	Message *store.Message    `json:"message,omitempty"`
 	State   map[string]any    `json:"state,omitempty"`
 	Choices []store.Choice    `json:"choices,omitempty"`
-	Prompt  string            `json:"prompt,omitempty"`
 	Tool    *ToolEvent        `json:"tool,omitempty"`
 	Usage   *llm.Usage        `json:"usage,omitempty"`
 	Tokens  *store.TokenStats `json:"tokens,omitempty"`
@@ -57,7 +56,7 @@ type TurnContext struct {
 	Step    int
 
 	// PlayerFacing is set when a tool shows the player something other than a
-	// private thought, i.e. speech, action, narration or a choice prompt.
+	// private thought, i.e. speech, action or a choice prompt.
 	PlayerFacing bool
 	// ChoicesOffered is set when the choices tool runs.
 	ChoicesOffered bool

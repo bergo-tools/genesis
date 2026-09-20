@@ -78,7 +78,7 @@ func presetGenTool() llm.ToolDef {
 				"title":              str("A short name for the preset."),
 				"genre":              str("A few words, for example dark fantasy."),
 				"description":        str("One or two sentences for the preset list."),
-				"opening":            str("The narration shown when a session starts."),
+				"opening":            str("The opening scene shown when a session starts."),
 				"personaDescription": str("The suggested player character."),
 				"instructions":       str("Standing guidance for the game master."),
 				"characters": map[string]any{
