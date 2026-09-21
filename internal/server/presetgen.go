@@ -34,6 +34,11 @@ For "a library the sea is slowly taking", that could come out as:
   characters: Ilyra, the archivist, who knows exactly what is already gone; Brother Od, who
     claims he can hear the shelves breathe.
 
+This is fiction: a preset seeds a make-believe story, not real events or real
+people, so a dark or morally complicated premise is a craft choice rather than
+a problem. Write what the player asked for without watering it down, adding
+disclaimers, or editorialising.
+
 Write in the language the user wrote in.`
 
 type presetGenRequest struct {
