@@ -93,6 +93,24 @@ func presetGenTool() llm.ToolDef {
 	}
 }
 
+// presetGenCompletion builds the one-shot completion that drafts a preset.
+// The tool choice is auto, not required: thinking models (DeepSeek among them)
+// reject a forced tool choice, and the brief already tells the model to answer
+// with a single draft_preset call.
+func presetGenCompletion(model, prompt string) llm.Request {
+	return llm.Request{
+		Model: model,
+		Messages: []llm.Message{
+			{Role: llm.RoleSystem, Content: presetGenSystem},
+			{Role: llm.RoleUser, Content: prompt},
+		},
+		Tools:       []llm.ToolDef{presetGenTool()},
+		ToolChoice:  llm.ToolChoiceAuto,
+		Temperature: 0.9,
+		MaxTokens:   4000,
+	}
+}
+
 // handleGenerateStory drafts a preset from a description. It never saves: the
 // client gets the draft, shows it in the editor, and saves what the user keeps.
 func (s *Server) handleGenerateStory(w http.ResponseWriter, r *http.Request) {
@@ -117,17 +135,7 @@ func (s *Server) handleGenerateStory(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Minute)
 	defer cancel()
-	resp, err := client.Complete(ctx, llm.Request{
-		Model: model,
-		Messages: []llm.Message{
-			{Role: llm.RoleSystem, Content: presetGenSystem},
-			{Role: llm.RoleUser, Content: prompt},
-		},
-		Tools:       []llm.ToolDef{presetGenTool()},
-		ToolChoice:  llm.ToolChoiceRequired,
-		Temperature: 0.9,
-		MaxTokens:   4000,
-	})
+	resp, err := client.Complete(ctx, presetGenCompletion(model, prompt))
 	if err != nil {
 		writeError(w, http.StatusBadGateway, err)
 		return

@@ -58,6 +58,19 @@ func TestDraftStoryFallsBackToATitle(t *testing.T) {
 	}
 }
 
+// Thinking models reject a forced tool choice ("thinking mode does not support
+// this tool_choice"), so preset generation must ask for auto and rely on the
+// brief to get the draft_preset call.
+func TestPresetGenUsesAutoToolChoice(t *testing.T) {
+	req := presetGenCompletion("some/model", "a drowned library")
+	if req.ToolChoice != llm.ToolChoiceAuto {
+		t.Fatalf("tool choice = %q, want auto", req.ToolChoice)
+	}
+	if len(req.Tools) != 1 || req.Tools[0].Name != "draft_preset" {
+		t.Fatalf("unexpected tools: %+v", req.Tools)
+	}
+}
+
 func TestPresetToolCall(t *testing.T) {
 	resp := &llm.Response{ToolCalls: []llm.ToolCall{
 		{Name: "something_else"},
