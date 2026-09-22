@@ -14,15 +14,7 @@ import (
 	"github.com/zp/genesis/internal/store"
 )
 
-const (
-	maxHistoryMessages = 80
-	// maxHistoryTokens is an approximate budget for the transcript sent to the
-	// provider. Latin text is ~4 chars/token and CJK ~1 token/char, so the
-	// estimate below errs on the safe side; long stories are trimmed from the
-	// front instead of growing until the provider rejects the request.
-	maxHistoryTokens = 24000
-	maxReminders     = 2
-)
+const maxReminders = 2
 
 const (
 	choicesReminder = "[system] You ended the turn without calling the choices tool. Choices are " +
@@ -328,11 +320,13 @@ func (a *Agent) executeTool(ctx context.Context, tc *TurnContext, call llm.ToolC
 	}
 }
 
+// buildMessages assembles one provider request. The whole transcript is sent:
+// there is no sliding window and nothing is trimmed, so each request is the
+// previous one plus the new turn and the provider's prefix cache stays warm.
 func (a *Agent) buildMessages(sess *store.Session) []llm.Message {
-	history := trimHistory(sess.History, maxHistoryMessages, maxHistoryTokens)
-	msgs := make([]llm.Message, 0, len(history)+1)
+	msgs := make([]llm.Message, 0, len(sess.History)+1)
 	msgs = append(msgs, llm.Message{Role: llm.RoleSystem, Content: a.SystemPrompt(sess)})
-	for _, m := range history {
+	for _, m := range sess.History {
 		if m.Role == llm.RoleUser && len(m.Images) > 0 {
 			cp := m
 			cp.Images = a.resolveImages(sess.ID, m.Images)
@@ -386,59 +380,4 @@ func mimeForExt(ext string) string {
 	default:
 		return "image/jpeg"
 	}
-}
-
-// trimHistory keeps the newest messages without orphaning tool results that
-// must immediately follow their assistant tool-call message. It applies both a
-// message cap and an approximate token budget so a long story cannot grow past
-// the provider's context window.
-func trimHistory(h []llm.Message, maxMessages, maxTokens int) []llm.Message {
-	if len(h) == 0 {
-		return h
-	}
-	start := 0
-	if maxMessages > 0 && len(h) > maxMessages {
-		start = len(h) - maxMessages
-	}
-	if maxTokens > 0 {
-		used := 0
-		boundary := start
-		for i := len(h) - 1; i >= start; i-- {
-			t := estimateTokens(h[i])
-			// Always keep at least the newest message, even if it alone is big.
-			if used+t > maxTokens && i < len(h)-1 {
-				break
-			}
-			used += t
-			boundary = i
-		}
-		start = boundary
-	}
-	for start < len(h) && h[start].Role == llm.RoleTool {
-		start++
-	}
-	return h[start:]
-}
-
-// estimateTokens approximates the provider token count for one message.
-func estimateTokens(m llm.Message) int {
-	n := 4 + estimateTextTokens(m.Content) + estimateTextTokens(m.Reasoning)
-	for _, tc := range m.ToolCalls {
-		n += estimateTextTokens(tc.Name) + estimateTextTokens(tc.Arguments)
-	}
-	return n
-}
-
-// estimateTextTokens counts non-ASCII runes whole and Latin text at roughly
-// four characters per token.
-func estimateTextTokens(s string) int {
-	ascii, other := 0, 0
-	for _, r := range s {
-		if r < 128 {
-			ascii++
-		} else {
-			other++
-		}
-	}
-	return ascii/4 + other
 }

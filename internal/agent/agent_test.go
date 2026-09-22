@@ -170,19 +170,17 @@ func TestContinueReportsUnknownTool(t *testing.T) {
 	}
 }
 
-func TestTrimHistoryKeepsToolPairs(t *testing.T) {
-	history := []llm.Message{
-		{Role: llm.RoleUser, Content: "a"},
-		{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{ID: "1", Name: "x"}}},
-		{Role: llm.RoleTool, ToolCallID: "1"},
-		{Role: llm.RoleUser, Content: "b"},
+// The transcript is sent whole: no window, no trimming, so the provider's
+// prefix cache covers everything but the newest turn.
+func TestBuildMessagesSendsWholeHistory(t *testing.T) {
+	a := newTestAgent(t, &fakeClient{})
+	sess := &store.Session{ID: "abc"}
+	for i := 0; i < 200; i++ {
+		sess.History = append(sess.History, llm.Message{Role: llm.RoleUser, Content: "m"})
 	}
-	got := trimHistory(history, 2, 0)
-	if len(got) != 2 || got[0].Role != llm.RoleTool {
-		// start advanced past the orphaned tool message
-		if len(got) != 1 || got[0].Role != llm.RoleUser {
-			t.Fatalf("unexpected trim result: %+v", got)
-		}
+	msgs := a.buildMessages(sess)
+	if len(msgs) != 201 || msgs[0].Role != llm.RoleSystem {
+		t.Fatalf("history must be sent whole, got %d messages", len(msgs))
 	}
 }
 
